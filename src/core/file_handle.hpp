@@ -86,7 +86,6 @@ public:
 	int8_t get8();
 	int32_t get32();
 
-	uint8_t* getRawNumber(size_t sz);
 	std::string getRawString(size_t sz);
 	std::string getString();
 	std::string getLongString();
@@ -148,7 +147,6 @@ public:
 		readOffsetSize += sz;
 		return true;
 	}
-	uint8_t* getRawNumber(size_t size);
 	std::string getRawString(size_t size);
 	std::string getString();
 	std::string getLongString();

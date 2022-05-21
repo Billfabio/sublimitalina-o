@@ -181,10 +181,9 @@ bool IOMap::parseTileArea(std::shared_ptr<BinaryNode> binaryNodeMapData, Map& ma
 	for (std::shared_ptr<BinaryNode> binaryNodeMapTile = binaryNodeMapData->getChild();
 	binaryNodeMapTile != nullptr; binaryNodeMapTile = binaryNodeMapTile->advance()) {
 		const uint8_t type = binaryNodeMapTile->getU8();
-		if (type != OTBM_TILE && type != OTBM_HOUSETILE) [[unlikely]] {
-			std::ostringstream string;
-			SPDLOG_ERROR("[IOMap::parseTileArea] - Invalid node tile node with type {}", type);
-			continue;
+		if (type == 0) {
+			SPDLOG_ERROR("[IOMap::parseTileArea] - Invalid node tile with type {}", type);
+			break;
 		}
 
 		Position tilePosition;
@@ -286,14 +285,13 @@ bool IOMap::parseTileArea(std::shared_ptr<BinaryNode> binaryNodeMapData, Map& ma
 				break;
 			}
 			default:
-				std::ostringstream string;
 				SPDLOG_ERROR("[[IOMap::parseTileArea] - Invalid tile attribute: {}, at position: {}", tileAttr, tilePosition.toString());
 				return false;
 			}
 		}
 
 		for (std::shared_ptr<BinaryNode> nodeItem = binaryNodeMapTile->getChild(); nodeItem != nullptr; nodeItem = nodeItem->advance()) {
-			if (nodeItem->getU8() != OTBM_ITEM) [[unlikely]] {
+			if (nodeItem->getU8() != OTBM_ITEM) {
 				SPDLOG_ERROR("[[IOMap::parseTileArea] - Unknown item node with type {}, at position {}", type, tilePosition.toString());
 				continue;
 			}

@@ -51,9 +51,6 @@ std::string FileHandle::getErrorMessage()
 		case FILE_PREMATURE_END: return "File end encountered unexpectedly";
 		default: return "Unknown error";
 	}
-	if (file == nullptr) {
-		return "File is nullptr";
-	}
 	if (ferror(file)) {
 		return "Internal file error #" + fromIntToString(ferror(file));
 	}
@@ -138,17 +135,6 @@ int32_t FileReadHandle::get32() {
 	}
 
 	fread(&value, 4, 1, file);
-	return value;
-}
-
-uint8_t* FileReadHandle::getRawNumber(size_t sz)
-{
-	uint8_t* value = 0;
-	size_t o = fread(value, 1, sz, file);
-	if (o != sz) {
-		setErrorCode(FILE_READ_ERROR);
-		return nullptr;
-	}
 	return value;
 }
 
@@ -404,18 +390,6 @@ std::shared_ptr<BinaryNode> BinaryNode::getChild()
 		return child;
 	}
 	return nullptr;
-}
-
-uint8_t* BinaryNode::getRawNumber(size_t size)
-{
-	uint8_t* uintSize = 0;
-	if (readOffsetSize + size > stringData.size()) {
-		readOffsetSize = stringData.size();
-		return uintSize;
-	}
-	memcpy(uintSize, stringData.data() + readOffsetSize, size);
-	readOffsetSize += size;
-	return uintSize;
 }
 
 std::string BinaryNode::getRawString(size_t size)
