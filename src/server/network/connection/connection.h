@@ -70,20 +70,7 @@ class Connection : public std::enable_shared_from_this<Connection>
 		Connection(const Connection&) = delete;
 		Connection& operator=(const Connection&) = delete;
 
-		Connection(asio::io_service& init_io_service,
-			ConstServicePort_ptr init_service_port) :
-			readTimer(init_io_service),
-			writeTimer(init_io_service),
-			service_port(std::move(init_service_port)),
-			socket(init_io_service) {
-			connectionState = CONNECTION_STATE_PENDING;
-			packetsSent = 0;
-			timeConnected = time(nullptr);
-			receivedFirst = false;
-			serverNameTime = 0;
-			receivedName = false;
-			receivedLastChar = false;
-		}
+		Connection(asio::io_service& initIoService, ConstServicePort_ptr initServicePort);
 		~Connection();
 
 		friend class ConnectionManager;

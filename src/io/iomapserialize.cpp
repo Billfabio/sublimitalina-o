@@ -200,7 +200,7 @@ bool IOMapSerialize::loadItem(PropStream& propStream, Cylinder* parent)
 						return false;
 					}
 				} else if (BedItem* bedItem = dynamic_cast<BedItem*>(dummy.get())) {
-					uint32_t sleeperGUID = bedItem->getSleeper();
+					uint32_t sleeperGUID = bedItem->getSleeperGUID();
 					if (sleeperGUID != 0) {
 						g_game().removeBedSleeper(sleeperGUID);
 					}

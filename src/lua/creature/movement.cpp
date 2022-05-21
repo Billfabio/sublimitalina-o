@@ -25,7 +25,7 @@
 #include "creatures/players/imbuements/imbuements.h"
 
 
-void MoveEvents::clearMap(MoveListMap& map) {
+void MoveEvents::clearMap(std::map<int32_t, MoveEventList>& map) const {
 	for (auto it = map.begin(); it != map.end(); ++it) {
 		for (int eventType = MOVE_EVENT_STEP_IN; eventType < MOVE_EVENT_LAST; ++eventType) {
 			it->second.moveEvent[eventType].clear();
@@ -145,7 +145,7 @@ bool MoveEvents::registerLuaEvent(MoveEvent* event) {
 	return true;
 }
 
-void MoveEvents::addEvent(MoveEvent moveEvent, int32_t id, MoveListMap& map) {
+void MoveEvents::addEvent(MoveEvent moveEvent, int32_t id, std::map<int32_t, MoveEventList>& map) {
 	auto it = map.find(id);
 	if (it == map.end()) {
 		MoveEventList moveEventList;
@@ -180,7 +180,7 @@ MoveEvent* MoveEvents::getEvent(Item* item, MoveEvent_t eventType, Slots_t slot)
 	}
 
   if (item->hasAttribute(ITEM_ATTRIBUTE_ACTIONID)) {
-		MoveListMap::iterator it = actionIdMap.find(item->getActionId());
+		std::map<int32_t, MoveEventList>::iterator it = actionIdMap.find(item->getActionId());
 		if (it != actionIdMap.end()) {
 			std::list<MoveEvent>& moveEventList = it->second.moveEvent[eventType];
 			for (MoveEvent& moveEvent : moveEventList) {
@@ -204,7 +204,11 @@ MoveEvent* MoveEvents::getEvent(Item* item, MoveEvent_t eventType, Slots_t slot)
 }
 
 MoveEvent* MoveEvents::getEvent(Item* item, MoveEvent_t eventType) {
-	MoveListMap::iterator it;
+	std::map<int32_t, MoveEventList>::iterator it;
+	if (!item) {
+		SPDLOG_ERROR("[MoveEvents::getEvent] - Wrong or not found item");
+		return nullptr;
+	}
 
 	if (item->hasAttribute(ITEM_ATTRIBUTE_UNIQUEID)) {
 		it = uniqueIdMap.find(item->getUniqueId());
@@ -236,7 +240,7 @@ MoveEvent* MoveEvents::getEvent(Item* item, MoveEvent_t eventType) {
 	return nullptr;
 }
 
-void MoveEvents::addEvent(MoveEvent moveEvent, const Position& pos, MovePosListMap& map) {
+void MoveEvents::addEvent(MoveEvent moveEvent, const Position& pos, std::map<Position, MoveEventList>& map) {
 	auto it = map.find(pos);
 	if (it == map.end()) {
 		MoveEventList moveEventList;
@@ -321,17 +325,13 @@ uint32_t MoveEvents::onItemMove(Item* item, Tile* tile, bool isAdd) {
 
 	uint32_t ret = 1;
 	MoveEvent* moveEvent = getEvent(tile, eventType1);
-	if (moveEvent) {
-		if (item && tile) {
-			ret &= moveEvent->fireAddRemItem(item, nullptr, tile->getPosition());
-		}
+	if (moveEvent && item && tile) {
+		ret &= moveEvent->fireAddRemItem(item, nullptr, tile->getPosition());
 	}
 
 	moveEvent = getEvent(item, eventType1);
-	if (moveEvent) {
-		if (item && tile) {
-			ret &= moveEvent->fireAddRemItem(item, nullptr, tile->getPosition());
-		}
+	if (moveEvent && item && tile) {
+		ret &= moveEvent->fireAddRemItem(item, nullptr, tile->getPosition());
 	}
 
 	for (size_t i = tile->getFirstIndex(), j = tile->getLastIndex(); i < j; ++i) {
@@ -346,10 +346,8 @@ uint32_t MoveEvents::onItemMove(Item* item, Tile* tile, bool isAdd) {
 		}
 
 		moveEvent = getEvent(tileItem, eventType2);
-		if (moveEvent) {
-			if (item && tileItem && tile) {
-				ret &= moveEvent->fireAddRemItem(item, tileItem, tile->getPosition());
-			}
+		if (moveEvent && item && tile) {
+			ret &= moveEvent->fireAddRemItem(item, tileItem, tile->getPosition());
 		}
 	}
 	return ret;
@@ -387,7 +385,7 @@ uint32_t MoveEvent::StepOutField(Creature*, Item*, const Position&) {
 
 uint32_t MoveEvent::AddItemField(Item* item, Item*, const Position&) {
 	if (!item) {
-		SPDLOG_ERROR("[MoveEvent::AddItemField] - Wrong or not found item id");
+		SPDLOG_ERROR("[MoveEvent::AddItemField] - Wrong or not found item");
 		return LUA_ERROR_ITEM_NOT_FOUND;
 	}
 

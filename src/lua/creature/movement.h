@@ -65,28 +65,22 @@ class MoveEvents final : public Scripts {
 		void clear();
 
 	private:
-		using MoveListMap = std::map<int32_t, MoveEventList>;
-		using MovePosListMap = std::map<Position, MoveEventList>;
-		void clearMap(MoveListMap& map);
+		void clearMap(std::map<int32_t, MoveEventList>& map) const;
 
-		void addEvent(MoveEvent moveEvent, int32_t id, MoveListMap& map);
+		void addEvent(MoveEvent moveEvent, int32_t id, std::map<int32_t, MoveEventList>& map);
 
-		void addEvent(MoveEvent moveEvent, const Position& pos, MovePosListMap& map);
+		void addEvent(MoveEvent moveEvent, const Position& pos, std::map<Position, MoveEventList>& map);
 		MoveEvent* getEvent(const Tile* tile, MoveEvent_t eventType);
 
 		MoveEvent* getEvent(Item* item, MoveEvent_t eventType, Slots_t slot);
 
-		MoveListMap uniqueIdMap;
-		MoveListMap actionIdMap;
-		MoveListMap itemIdMap;
-		MovePosListMap positionMap;
+		std::map<int32_t, MoveEventList> uniqueIdMap;
+		std::map<int32_t, MoveEventList> actionIdMap;
+		std::map<int32_t, MoveEventList> itemIdMap;
+		std::map<Position, MoveEventList> positionMap;
 };
 
 constexpr auto g_moveEvents = &MoveEvents::getInstance;
-
-using StepFunction = std::function<uint32_t(Creature* creature, Item* item, const Position& pos)>;
-using MoveFunction = std::function<uint32_t(Item* item, Item* tileItem, const Position& pos)>;
-using EquipFunction = std::function<uint32_t(MoveEvent* moveEvent, Player* player, Item* item, Slots_t slot, bool boolean)>;
 
 class MoveEvent final : public Script {
 	public:
@@ -210,15 +204,32 @@ class MoveEvent final : public Script {
 		static uint32_t EquipItem(MoveEvent* moveEvent, Player* player, Item* item, Slots_t slot, bool boolean);
 		static uint32_t DeEquipItem(MoveEvent* moveEvent, Player* player, Item* item, Slots_t slot, bool boolean);
 
-		MoveEvent_t eventType = MOVE_EVENT_NONE;
-		StepFunction stepFunction;
-		MoveFunction moveFunction;
-		EquipFunction equipFunction;
-
 	private:
 		std::string getScriptTypeName() const override;
 
 		uint32_t slot = SLOTP_WHEREEVER;
+
+		MoveEvent_t eventType = MOVE_EVENT_NONE;
+		/// Step function
+		std::function<uint32_t(
+			Creature* creature,
+			Item* item,
+			const Position& pos
+		)> stepFunction;
+		// Move function
+		std::function<uint32_t(
+			Item* item,
+			Item* tileItem,
+			const Position& pos
+		)> moveFunction;
+		// equipFunction
+		std::function<uint32_t(
+			MoveEvent* moveEvent,
+			Player* player,
+			Item* item,
+			Slots_t slot,
+			bool boolean
+		)> equipFunction;
 
 		//onEquip information
 		uint32_t reqLevel = 0;
@@ -235,6 +246,8 @@ class MoveEvent final : public Script {
 		std::vector<Position> posList;
 
 		std::string fileName;
+
+		friend class MoveEventFunctions;
 };
 
 #endif  // SRC_LUA_CREATURE_MOVEMENT_H_

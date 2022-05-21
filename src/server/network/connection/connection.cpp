@@ -25,6 +25,7 @@
 #include "server/network/protocol/protocolgame.h"
 #include "game/scheduling/scheduler.h"
 #include "server/server.h"
+#include "game/game.h"
 
 #include <chrono>
 
@@ -53,13 +54,33 @@ void ConnectionManager::closeAll()
 			std::error_code error;
 			connection->socket.shutdown(asio::ip::tcp::socket::shutdown_both, error);
 			connection->socket.close(error);
-		} catch (std::system_error&) {
+		} catch (std::system_error& systemError) {
+			SPDLOG_ERROR("[ConnectionManager::closeAll] - Failed to close connection, system error code {}", systemError.what());
 		}
 	}
 	connections.clear();
 }
 
 // Connection
+Connection::Connection(asio::io_service& initIoService, ConstServicePort_ptr initServicePort) :
+	readTimer(initIoService),
+	writeTimer(initIoService),
+	service_port(std::move(initServicePort)),
+	socket(initIoService)
+{
+	connectionState = CONNECTION_STATE_PENDING;
+	packetsSent = 0;
+	timeConnected = g_game().getTimeNow();
+	receivedFirst = false;
+	serverNameTime = 0;
+	receivedName = false;
+	receivedLastChar = false;
+}
+
+Connection::~Connection()
+{
+	closeSocket();
+}
 
 void Connection::close(bool force)
 {
@@ -94,11 +115,6 @@ void Connection::closeSocket()
 			SPDLOG_ERROR("[Connection::closeSocket] - {}", e.what());
 		}
 	}
-}
-
-Connection::~Connection()
-{
-	closeSocket();
 }
 
 void Connection::accept(Protocol_ptr conProtocol)
@@ -149,7 +165,7 @@ void Connection::parseHeader(const std::error_code& error)
 		return;
 	}
 
-	uint32_t timePassed = std::max<uint32_t>(1, (time(nullptr) - timeConnected) + 1);
+	uint32_t timePassed = std::max<uint32_t>(1, (g_game().getTimeNow() - timeConnected) + 1);
 	if ((++packetsSent / timePassed) > static_cast<uint32_t>(g_configManager().getNumber(MAX_PACKETS_PER_SECOND))) {
 			SPDLOG_INFO("{} disconnected for exceeding packet per second limit", convertIPToString(getIP()));
 			close();
@@ -202,7 +218,7 @@ void Connection::parseHeader(const std::error_code& error)
 	}
 
 	if (timePassed > 2) {
-		timeConnected = time(nullptr);
+		timeConnected = g_game().getTimeNow();
 		packetsSent = 0;
 	}
 

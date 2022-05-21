@@ -89,7 +89,7 @@ void Game::loadBoostedCreature()
 
 	uint16_t date = result->getNumber<uint16_t>("date");
 	std::string name = "";
-	time_t now = std::time(0);
+	std::time_t now = getTimeNow();
 	tm *ltm = localtime(&now);
 	uint8_t today = ltm->tm_mday;
 	if (date == today) {
@@ -143,7 +143,7 @@ void Game::start(ServiceManager* manager)
 {
 	serviceManager = manager;
 
-	time_t now = std::time(0);
+	std::time_t now = getTimeNow();
 	const tm* tms = localtime(&now);
 	int minutes = tms->tm_min;
 	lightHour = (minutes * LIGHT_DAY_LENGTH) / 60;
@@ -173,8 +173,8 @@ bool Game::loadScheduleEventFromXml()
 	}
 
 		int16_t daysNow;
-		time_t t = std::time(NULL);
-		tm* timePtr = localtime(&t);
+		std::time_t timeNow = getTimeNow();
+		tm* timePtr = localtime(&timeNow);
 		int16_t daysMath = ((timePtr->tm_year + 1900) * 365) + ((timePtr->tm_mon + 1) * 30) + (timePtr->tm_mday);
 
 	for (auto schedNode : doc.child("events").children()) {
@@ -3726,7 +3726,7 @@ void Game::playerWriteItem(uint32_t playerId, uint32_t windowTextId, const std::
 		if (writeItem->getText() != text) {
 			writeItem->setText(text);
 			writeItem->setWriter(player->getName());
-			writeItem->setDate(std::time(nullptr));
+			writeItem->setDate(getTimeNow());
 		}
 	} else {
 		writeItem->resetText();
@@ -6829,8 +6829,8 @@ void Game::updateCreatureType(Creature* creature)
 
 void Game::updatePremium(account::Account& account)
 {
-bool save = false;
-	time_t timeNow = std::time(nullptr);
+	bool save = false;
+	std::time_t timeNow = getTimeNow();
 	uint32_t rem_days = 0;
 	time_t last_day;
 	account.GetPremiumRemaningDays(&rem_days);
@@ -7373,7 +7373,7 @@ void Game::playerDebugAssert(uint32_t playerId, const std::string& assertLine, c
 	// TODO: move debug assertions to database
 	FILE* file = fopen("client_assertions.txt", "a");
 	if (file) {
-		fprintf(file, "----- %s - %s (%s) -----\n", formatDate(std::time(nullptr)).c_str(), player->getName().c_str(), convertIPToString(player->getIP()).c_str());
+		fprintf(file, "----- %s - %s (%s) -----\n", formatDate(getTimeNow()).c_str(), player->getName().c_str(), convertIPToString(player->getIP()).c_str());
 		fprintf(file, "%s\n%s\n%s\n%s\n", assertLine.c_str(), date.c_str(), description.c_str(), comment.c_str());
 		fclose(file);
 	}
@@ -7957,9 +7957,9 @@ void Game::playerAcceptMarketOffer(uint32_t playerId, uint32_t timestamp, uint16
 
 	const int32_t marketOfferDuration = g_configManager().getNumber(MARKET_OFFER_DURATION);
 
-	IOMarket::appendHistory(player->getGUID(), (offer.type == MARKETACTION_BUY ? MARKETACTION_SELL : MARKETACTION_BUY), offer.itemId, amount, offer.price, std::time(nullptr), OFFERSTATE_ACCEPTEDEX);
+	IOMarket::appendHistory(player->getGUID(), (offer.type == MARKETACTION_BUY ? MARKETACTION_SELL : MARKETACTION_BUY), offer.itemId, amount, offer.price, getTimeNow(), OFFERSTATE_ACCEPTEDEX);
 
-	IOMarket::appendHistory(offer.playerId, offer.type, offer.itemId, amount, offer.price, std::time(nullptr), OFFERSTATE_ACCEPTED);
+	IOMarket::appendHistory(offer.playerId, offer.type, offer.itemId, amount, offer.price, getTimeNow(), OFFERSTATE_ACCEPTED);
 
 	offer.amount -= amount;
 
