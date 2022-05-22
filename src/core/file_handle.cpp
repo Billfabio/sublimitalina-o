@@ -51,9 +51,7 @@ std::string FileHandle::getErrorMessage()
 		case FILE_PREMATURE_END: return "File end encountered unexpectedly";
 		default: return "Unknown error";
 	}
-	if (ferror(file)) {
-		return "Internal file error #" + fromIntToString(ferror(file));
-	}
+
 	return "No error";
 }
 

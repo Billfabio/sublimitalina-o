@@ -58,10 +58,11 @@ class PropStream
 				return false;
 			}
 
-			std::unique_ptr<char> str = std::make_unique<char>(strLen + 1);
-			memcpy(str.get(), p, strLen);
-			str.get()[strLen] = 0;
-			ret.assign(str.get(), strLen);
+			char* str = new char[strLen + 1];
+			memcpy(str, p, strLen);
+			str[strLen] = 0;
+			ret.assign(str, strLen);
+			delete[] str;
 			p += strLen;
 			return true;
 		}
