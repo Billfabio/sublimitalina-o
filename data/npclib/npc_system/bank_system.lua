@@ -585,7 +585,7 @@ function GetGuildIdByName(name, func)
 	db.asyncStoreQuery("SELECT `id` FROM `guilds` WHERE `name` = " .. db.escapeString(name),
 		function(resultId)
 			if resultId then
-				func(result.getNumber(resultId, "id"))
+				func(result.get32(resultId, "id"))
 				result.free(resultId)
 			else
 				func(nil)
@@ -602,7 +602,7 @@ function GetGuildBalance(id)
 		local balance
 		local resultId = db.storeQuery("SELECT `balance` FROM `guilds` WHERE `id` = " .. id)
 		if resultId then
-			balance = result.getNumber(resultId, "balance")
+			balance = result.getU64(resultId, "balance")
 			result.free(resultId)
 		end
 

@@ -26,7 +26,20 @@ class ResultFunctions final : LuaScriptInterface {
 	public:
 		static void init(lua_State* L) {
 			registerTable(L, "result");
-			registerMethod(L, "result", "getNumber", ResultFunctions::luaResultGetNumber);
+			// Signed integer conversion
+			registerMethod(L, "result", "get8", ResultFunctions::luaResultGet8);
+			registerMethod(L, "result", "get16", ResultFunctions::luaResultGet16);
+			registerMethod(L, "result", "get32", ResultFunctions::luaResultGet32);
+			registerMethod(L, "result", "get64", ResultFunctions::luaResultGet64);
+			// Unsigned intenger conversion
+			registerMethod(L, "result", "getU8", ResultFunctions::luaResultGetU8);
+			registerMethod(L, "result", "getU16", ResultFunctions::luaResultGetU16);
+			registerMethod(L, "result", "getU32", ResultFunctions::luaResultGetU32);
+			registerMethod(L, "result", "getU64", ResultFunctions::luaResultGetU64);
+			// Others conversions
+			registerMethod(L, "result", "getTime", ResultFunctions::luaResultGetTime);
+			registerMethod(L, "result", "getBoolean", ResultFunctions::luaResultGetBoolean);
+
 			registerMethod(L, "result", "getString", ResultFunctions::luaResultGetString);
 			registerMethod(L, "result", "getStream", ResultFunctions::luaResultGetStream);
 			registerMethod(L, "result", "next", ResultFunctions::luaResultNext);
@@ -35,7 +48,16 @@ class ResultFunctions final : LuaScriptInterface {
 
 	private:
 		static int luaResultFree(lua_State* L);
-		static int luaResultGetNumber(lua_State* L);
+		static int luaResultGet8(lua_State* L);
+		static int luaResultGet16(lua_State* L);
+		static int luaResultGet32(lua_State* L);
+		static int luaResultGet64(lua_State* L);
+		static int luaResultGetU8(lua_State* L);
+		static int luaResultGetU16(lua_State* L);
+		static int luaResultGetU32(lua_State* L);
+		static int luaResultGetU64(lua_State* L);
+		static int luaResultGetTime(lua_State* L);
+		static int luaResultGetBoolean(lua_State* L);
 		static int luaResultGetStream(lua_State* L);
 		static int luaResultGetString(lua_State* L);
 		static int luaResultNext(lua_State* L);

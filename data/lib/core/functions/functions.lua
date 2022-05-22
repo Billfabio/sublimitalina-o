@@ -97,7 +97,8 @@ function getAccountNumberByPlayerName(name)
 
 	local resultId = db.storeQuery("SELECT `account_id` FROM `players` WHERE `name` = " .. db.escapeString(name))
 	if resultId ~= false then
-		local accountId = result.getNumber(resultId, "account_id")
+		-- The table account_id is int type (uint32_t)
+		local accountId = result.getU32(resultId, "account_id")
 		result.free(resultId)
 		return accountId
 	end
@@ -164,7 +165,8 @@ end
 function getPlayerSpouse(id)
 	local resultQuery = db.storeQuery("SELECT `marriage_spouse` FROM `players` WHERE `id` = " .. db.escapeString(id))
 	if resultQuery ~= false then
-		local ret = result.getNumber(resultQuery, "marriage_spouse")
+		-- The table marriage_spouse is int type (int32_t)
+		local ret = result.get32(resultQuery, "marriage_spouse")
 		result.free(resultQuery)
 		return ret
 	end
@@ -174,7 +176,8 @@ end
 function getPlayerMarriageStatus(id)
 	local resultQuery = db.storeQuery("SELECT `marriage_status` FROM `players` WHERE `id` = " .. db.escapeString(id))
 	if resultQuery ~= false then
-		local ret = result.getNumber(resultQuery, "marriage_status")
+		-- The table marriage_status is bigint type (uint64_t)
+		local ret = result.getU64(resultQuery, "marriage_status")
 		result.free(resultQuery)
 		return ret
 	end
