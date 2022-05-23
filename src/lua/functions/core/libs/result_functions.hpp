@@ -26,6 +26,7 @@ class ResultFunctions final : LuaScriptInterface {
 	public:
 		static void init(lua_State* L) {
 			registerTable(L, "result");
+			registerTable(L, "Result");
 			// Signed integer conversion
 			registerMethod(L, "result", "get8", ResultFunctions::luaResultGet8);
 			registerMethod(L, "result", "get16", ResultFunctions::luaResultGet16);

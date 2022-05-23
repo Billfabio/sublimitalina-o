@@ -22,7 +22,7 @@
 #include "lua/functions/core/libs/result_functions.hpp"
 
 int ResultFunctions::luaResultGet8(lua_State* L) {
-	// result:get8(result, tableName)
+	// result.get8(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -35,7 +35,7 @@ int ResultFunctions::luaResultGet8(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGet16(lua_State* L) {
-	// result:get16(result, tableName)
+	// result.get16(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -48,7 +48,7 @@ int ResultFunctions::luaResultGet16(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGet32(lua_State* L) {
-	// result:get32(result, tableName)
+	// result.get32(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -61,7 +61,7 @@ int ResultFunctions::luaResultGet32(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGet64(lua_State* L) {
-	// result:get64(result, tableName)
+	// result.get64(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -74,7 +74,7 @@ int ResultFunctions::luaResultGet64(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetU8(lua_State* L) {
-	// result:getU8(result, tableName)
+	// result.getU8(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -87,7 +87,7 @@ int ResultFunctions::luaResultGetU8(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetU16(lua_State* L) {
-	// result:getU16(result, tableName)
+	// result.getU16(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -100,7 +100,7 @@ int ResultFunctions::luaResultGetU16(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetU32(lua_State* L) {
-	// result:getU32(result, tableName)
+	// result.getU32(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -113,7 +113,7 @@ int ResultFunctions::luaResultGetU32(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetU64(lua_State* L) {
-	// result:getU64(result, tableName)
+	// result.getU64(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -126,7 +126,7 @@ int ResultFunctions::luaResultGetU64(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetTime(lua_State* L) {
-	// result:getTime(result, tableName)
+	// result.getTime(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -139,7 +139,7 @@ int ResultFunctions::luaResultGetTime(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetBoolean(lua_State* L) {
-	// result:getBoolean(result, tableName)
+	// result.getBoolean(result, tableName)
 	DBResult_ptr result = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!result) {
 		pushBoolean(L, false);
@@ -152,7 +152,7 @@ int ResultFunctions::luaResultGetBoolean(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetString(lua_State* L) {
-	// result:getString(result, tableName)
+	// result.getString(result, tableName)
 	DBResult_ptr res = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!res) {
 		pushBoolean(L, false);
@@ -165,7 +165,7 @@ int ResultFunctions::luaResultGetString(lua_State* L) {
 }
 
 int ResultFunctions::luaResultGetStream(lua_State* L) {
-	// result:getStream(result, tableName)
+	// result.getStream(result, tableName)
 	DBResult_ptr res = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, 1));
 	if (!res) {
 		pushBoolean(L, false);
@@ -180,7 +180,7 @@ int ResultFunctions::luaResultGetStream(lua_State* L) {
 }
 
 int ResultFunctions::luaResultNext(lua_State* L) {
-	// result:next()
+	// result.next()
 	DBResult_ptr res = ScriptEnvironment::getResultByID(getNumber<uint32_t>(L, -1));
 	if (!res) {
 		pushBoolean(L, false);
@@ -192,7 +192,7 @@ int ResultFunctions::luaResultNext(lua_State* L) {
 }
 
 int ResultFunctions::luaResultFree(lua_State* L) {
-	// result:free()
+	// result.free()
 	pushBoolean(L, ScriptEnvironment::removeResult(getNumber<uint32_t>(L, -1)));
 	return 1;
 }

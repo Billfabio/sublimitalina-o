@@ -38,7 +38,7 @@ void FileHandle::close()
 	}
 }
 
-std::string FileHandle::getErrorMessage()
+std::string FileHandle::getErrorMessage() const
 {
 	switch(errorCode) {
 		case FILE_NO_ERROR: return "No error";

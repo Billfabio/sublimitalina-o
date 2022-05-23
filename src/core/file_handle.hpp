@@ -66,7 +66,7 @@ public:
 	void setErrorCode(FileHandleError newErrorCode) {
 		errorCode = newErrorCode;
 	}
-	std::string getErrorMessage();
+	std::string getErrorMessage() const;
 public:
 	FileHandleError errorCode;
 	FILE* file;
