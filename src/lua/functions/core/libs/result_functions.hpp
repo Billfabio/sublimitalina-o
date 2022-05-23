@@ -25,26 +25,25 @@
 class ResultFunctions final : LuaScriptInterface {
 	public:
 		static void init(lua_State* L) {
-			registerTable(L, "result");
 			registerTable(L, "Result");
 			// Signed integer conversion
-			registerMethod(L, "result", "get8", ResultFunctions::luaResultGet8);
-			registerMethod(L, "result", "get16", ResultFunctions::luaResultGet16);
-			registerMethod(L, "result", "get32", ResultFunctions::luaResultGet32);
-			registerMethod(L, "result", "get64", ResultFunctions::luaResultGet64);
+			registerMethod(L, "Result", "get8", ResultFunctions::luaResultGet8);
+			registerMethod(L, "Result", "get16", ResultFunctions::luaResultGet16);
+			registerMethod(L, "Result", "get32", ResultFunctions::luaResultGet32);
+			registerMethod(L, "Result", "get64", ResultFunctions::luaResultGet64);
 			// Unsigned intenger conversion
-			registerMethod(L, "result", "getU8", ResultFunctions::luaResultGetU8);
-			registerMethod(L, "result", "getU16", ResultFunctions::luaResultGetU16);
-			registerMethod(L, "result", "getU32", ResultFunctions::luaResultGetU32);
-			registerMethod(L, "result", "getU64", ResultFunctions::luaResultGetU64);
+			registerMethod(L, "Result", "getU8", ResultFunctions::luaResultGetU8);
+			registerMethod(L, "Result", "getU16", ResultFunctions::luaResultGetU16);
+			registerMethod(L, "Result", "getU32", ResultFunctions::luaResultGetU32);
+			registerMethod(L, "Result", "getU64", ResultFunctions::luaResultGetU64);
 			// Others conversions
-			registerMethod(L, "result", "getTime", ResultFunctions::luaResultGetTime);
-			registerMethod(L, "result", "getBoolean", ResultFunctions::luaResultGetBoolean);
+			registerMethod(L, "Result", "getTime", ResultFunctions::luaResultGetTime);
+			registerMethod(L, "Result", "getBoolean", ResultFunctions::luaResultGetBoolean);
 
-			registerMethod(L, "result", "getString", ResultFunctions::luaResultGetString);
-			registerMethod(L, "result", "getStream", ResultFunctions::luaResultGetStream);
-			registerMethod(L, "result", "next", ResultFunctions::luaResultNext);
-			registerMethod(L, "result", "free", ResultFunctions::luaResultFree);
+			registerMethod(L, "Result", "getString", ResultFunctions::luaResultGetString);
+			registerMethod(L, "Result", "getStream", ResultFunctions::luaResultGetStream);
+			registerMethod(L, "Result", "next", ResultFunctions::luaResultNext);
+			registerMethod(L, "Result", "free", ResultFunctions::luaResultFree);
 		}
 
 	private:

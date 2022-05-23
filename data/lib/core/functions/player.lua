@@ -141,7 +141,7 @@ function Player.transferMoneyTo(self, target, amount)
 
 		local query_town = db.storeQuery('SELECT `town_id` FROM `players` WHERE `name` = ' .. db.escapeString(target) ..' LIMIT 1;')
 		if query_town ~= false then
-			result.free(consulta)
+			Result.free(consulta)
 			db.query("UPDATE `players` SET `balance` = `balance` + '" .. amount .. "' WHERE `name` = " .. db.escapeString(target))
 		end
 	end
@@ -247,9 +247,9 @@ function Player.getAccountStorage(self, accountId, key, forceUpdate)
 	local query = db.storeQuery("SELECT `key`, MAX(`value`) as value FROM `player_storage` WHERE `player_id` IN (SELECT `id` FROM `players` WHERE `account_id` = ".. accountId ..") AND `key` = ".. key .." GROUP BY `key` LIMIT 1;")
 	if query ~= false then
 		-- The table player_storage/value is int type (int32_t)
-		local value = result.get32(query, "value")
+		local value = Result.get32(query, "value")
 		ACCOUNT_STORAGES[accountId] = value
-		result.free(query)
+		Result.free(query)
 		return value
 	end
 	return false
