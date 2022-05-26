@@ -6862,7 +6862,7 @@ void Game::updatePremium(account::Account& account)
                     }
                     save = true;
                 } else {
-                    if(account::ERROR_NO == account.setPremiumRemaningDays(
+                    if(account::ERROR_NO == account.setPremiumRemainingDays(
                             (rem_days - days))) {
                             time_t remainder = (timeNow - last_day) % 86400;
                         if(account::ERROR_NO == account.setPremiumLastDay(
@@ -6875,7 +6875,7 @@ void Game::updatePremium(account::Account& account)
         }
     }
     else if (last_day != 0) {
-        if(account::ERROR_NO == account.SetPremiumLastDay(0)) {
+        if(account::ERROR_NO == account.setPremiumLastDay(0)) {
             save = true;
         }
     }
@@ -7523,7 +7523,7 @@ void Game::playerCreateMarketOffer(uint32_t playerId, uint8_t type, uint16_t ite
 	}
 
 	Player* player = getPlayerByID(playerId);
-	if (!player) {
+	if ((nullptr == player) || (nullptr == player->getAccount())) {
 		return;
 	}
 
@@ -7578,16 +7578,15 @@ void Game::playerCreateMarketOffer(uint32_t playerId, uint8_t type, uint16_t ite
 		}
 
 		if (it.id == ITEM_STORE_COIN) {
-			account::Account account(player->getAccount());
-			account.LoadAccountDB();
-			uint32_t coins;
-			account.GetCoins(&coins);
 
-			if (amount > coins) {
+            auto [coins, result] = player->getAccount()->getCoins(account::CoinType::COIN);
+
+            if (amount > coins) {
 				return;
 			}
 
-			account.RemoveCoins(static_cast<uint32_t>(amount));
+			player->getAccount()->removeCoins(account::CoinType::COIN,
+                static_cast<uint32_t>(amount));
 		} else {
 			uint16_t stashminus = player->getStashItemCount(it.wareId);
 			amount = (amount - (amount > stashminus ? stashminus : amount));
