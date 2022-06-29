@@ -64,7 +64,7 @@ struct OpenContainer {
 
 using MuteCountMap = std::map<uint32_t, uint32_t>;
 
-static constexpr int32_t PLAYER_MAX_SPEED = 4500;
+static constexpr int32_t PLAYER_MAX_SPEED = 70000;
 static constexpr int32_t PLAYER_MIN_SPEED = 10;
 
 class Player final : public Creature, public Cylinder
@@ -1152,7 +1152,7 @@ class Player final : public Creature, public Cylinder
 			}
 		}
 		void sendDistanceShoot(const Position& from, const Position& to,
-                               unsigned char type) const {
+                               uint8_t type) const {
 			if (client) {
 				client->sendDistanceShoot(from, to, type);
 			}
@@ -2116,7 +2116,7 @@ class Player final : public Creature, public Cylinder
 		std::map<uint8_t, uint16_t> maxValuePerSkill = {
 			{SKILL_LIFE_LEECH_CHANCE, 100},
 			{SKILL_MANA_LEECH_CHANCE, 100},
-			{SKILL_CRITICAL_HIT_CHANCE, 10}
+			{SKILL_CRITICAL_HIT_CHANCE, g_configManager().getNumber(CRITICALCHANCE)}
 		};
 
 		std::map<uint32_t, Reward*> rewardMap;

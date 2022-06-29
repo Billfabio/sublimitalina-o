@@ -42,6 +42,11 @@ maxPacketsPerSecond = 25
 maxItem = 2000
 maxContainer = 100
 
+-- Packet Compression
+-- Minimize network bandwith and reduce ping
+-- Levels: 0 = disabled, 1 = best speed, 9 = best compression
+packetCompressionLevel = 6
+
 -- Depot Limit
 freeDepotLimit = 2000
 premiumDepotLimit = 10000
@@ -196,6 +201,10 @@ coinPacketSize = 25
 coinImagesURL = "http://127.0.0.1/images/store/"
 classicAttackSpeed = false
 showScriptsLogInConsole = false
+-- configure maximum value of critical imbuement
+criticalChance = 10
+inventoryGlowOnFiveBless = false
+adventurersBlessingLevel = 21
 
 -- Global server Save
 -- NOTE: globalServerSaveNotifyDuration in minutes
