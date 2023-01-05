@@ -1,21 +1,11 @@
 /**
- * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- */
+ * Canary - A free and open-source MMORPG server emulator
+ * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Repository: https://github.com/opentibiabr/canary
+ * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
+ * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
+ * Website: https://docs.opentibiabr.org/
+*/
 
 #ifndef SRC_CREATURES_PLAYERS_PLAYER_H_
 #define SRC_CREATURES_PLAYERS_PLAYER_H_
@@ -185,7 +175,7 @@ class Player final : public Creature, public Cylinder
 			return guid;
 		}
 		bool canSeeInvisibility() const override {
-			return hasFlag(PlayerFlag_CanSenseInvisibility) || group->access;
+			return hasFlag(PlayerFlags_t::CanSenseInvisibility) || group->access;
 		}
 
 		void setDailyReward(uint8_t reward) {
@@ -357,12 +347,8 @@ class Player final : public Creature, public Cylinder
 			return manaSpent;
 		}
 
-		bool hasFlag(PlayerFlags value) const {
-			return (group->flags & value) != 0;
-		}
-
-		bool hasCustomFlag(PlayerCustomFlags value) const {
-			return (group->customflags & value) != 0;
+		bool hasFlag(PlayerFlags_t flag) const {
+			return group->flags[Groups::getFlagNumber(flag)];
 		}
 
 		BedItem* getBedItem() {
@@ -610,27 +596,27 @@ class Player final : public Creature, public Cylinder
 		}
 
 		uint32_t getBaseCapacity() const {
-			if (hasFlag(PlayerFlag_CannotPickupItem)) {
+			if (hasFlag(PlayerFlags_t::CannotPickupItem)) {
 				return 0;
-			} else if (hasFlag(PlayerFlag_HasInfiniteCapacity)) {
+			} else if (hasFlag(PlayerFlags_t::HasInfiniteCapacity)) {
 				return std::numeric_limits<uint32_t>::max();
 			}
 			return capacity;
 		}
 
 		uint32_t getCapacity() const {
-			if (hasFlag(PlayerFlag_CannotPickupItem)) {
+			if (hasFlag(PlayerFlags_t::CannotPickupItem)) {
 				return 0;
-			} else if (hasFlag(PlayerFlag_HasInfiniteCapacity)) {
+			} else if (hasFlag(PlayerFlags_t::HasInfiniteCapacity)) {
 				return std::numeric_limits<uint32_t>::max();
 			}
 			return capacity + bonusCapacity;
 		}
 
 		uint32_t getFreeCapacity() const {
-			if (hasFlag(PlayerFlag_CannotPickupItem)) {
+			if (hasFlag(PlayerFlags_t::CannotPickupItem)) {
 				return 0;
-			} else if (hasFlag(PlayerFlag_HasInfiniteCapacity)) {
+			} else if (hasFlag(PlayerFlags_t::HasInfiniteCapacity)) {
 				return std::numeric_limits<uint32_t>::max();
 			} else {
 				return std::max<int32_t>(0, getCapacity() - inventoryWeight);
@@ -2468,7 +2454,7 @@ class Player final : public Creature, public Cylinder
 				return;
 			}
 
-			if (!hasFlag(PlayerFlag_SetMaxSpeed)) {
+			if (!hasFlag(PlayerFlags_t::SetMaxSpeed)) {
 				baseSpeed = static_cast<uint16_t>(vocation->getBaseSpeed() + (level - 1));
 			} else {
 				baseSpeed = PLAYER_MAX_SPEED;

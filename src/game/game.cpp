@@ -1,21 +1,11 @@
 /**
- * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- */
+ * Canary - A free and open-source MMORPG server emulator
+ * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Repository: https://github.com/opentibiabr/canary
+ * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
+ * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
+ * Website: https://docs.opentibiabr.org/
+*/
 
 #include "pch.hpp"
 
@@ -244,7 +234,7 @@ void Game::setGameState(GameState_t newState)
 			/* kick all players without the CanAlwaysLogin flag */
 			auto it = players.begin();
 			while (it != players.end()) {
-				if (!it->second->hasFlag(PlayerFlag_CanAlwaysLogin)) {
+				if (!it->second->hasFlag(PlayerFlags_t::CanAlwaysLogin)) {
 					it->second->removePlayer(true);
 					it = players.begin();
 				} else {
@@ -789,7 +779,7 @@ void Game::executeDeath(uint32_t creatureId)
 
 void Game::playerTeleport(uint32_t playerId, const Position& newPosition) {
   Player* player = getPlayerByID(playerId);
-  if (!player || !player->hasCustomFlag(PlayerCustomFlag_CanMapClickTeleport)) {
+  if (!player || !player->hasFlag(PlayerFlags_t::CanMapClickTeleport)) {
     return;
   }
 
@@ -875,6 +865,11 @@ void Game::playerMoveThing(uint32_t playerId, const Position& fromPos,
 	Player* player = getPlayerByID(playerId);
 	if (!player) {
 		return;
+	}
+	
+	// Prevent the player from being able to move the item within the imbuement window
+	if (player->hasImbuingItem()) {
+        return;
 	}
 
 	uint8_t fromIndex = 0;
@@ -988,7 +983,7 @@ void Game::playerMoveCreature(Player* player, Creature* movingCreature, const Po
 		isFamiliar = monster->isFamiliar();
 	}
 
-	if (!isFamiliar && ((!movingCreature->isPushable() && !player->hasFlag(PlayerFlag_CanPushAllCreatures)) ||
+	if (!isFamiliar && ((!movingCreature->isPushable() && !player->hasFlag(PlayerFlags_t::CanPushAllCreatures)) ||
 				(movingCreature->isInGhostMode() && !player->isAccessPlayer()))) {
 		player->sendCancelMessage(RETURNVALUE_NOTMOVEABLE);
 		return;
@@ -1379,6 +1374,15 @@ ReturnValue Game::internalMoveItem(Cylinder* fromCylinder,
                                   uint32_t flags /*= 0*/, Creature* actor/*=nullptr*/,
                                   Item* tradeItem/* = nullptr*/)
 {
+	if (fromCylinder == nullptr) {
+		SPDLOG_ERROR("[{}] fromCylinder is nullptr", __FUNCTION__);
+		return RETURNVALUE_NOTPOSSIBLE;
+	}
+	if (toCylinder == nullptr) {
+		SPDLOG_ERROR("[{}] toCylinder is nullptr", __FUNCTION__);
+		return RETURNVALUE_NOTPOSSIBLE;
+	}
+
 	Tile* fromTile = fromCylinder->getTile();
 	if (fromTile) {
 		auto it = browseFields.find(fromTile);
@@ -1610,7 +1614,12 @@ ReturnValue Game::internalAddItem(Cylinder* toCylinder, Item* item,
 ReturnValue Game::internalAddItem(Cylinder* toCylinder, Item* item, int32_t index,
                                   uint32_t flags, bool test, uint32_t& remainderCount)
 {
-	if (toCylinder == nullptr || item == nullptr) {
+	if (toCylinder == nullptr) {
+		SPDLOG_ERROR("[{}] fromCylinder is nullptr", __FUNCTION__);
+		return RETURNVALUE_NOTPOSSIBLE;
+	}
+	if (item == nullptr) {
+		SPDLOG_ERROR("[{}] item is nullptr", __FUNCTION__);
 		return RETURNVALUE_NOTPOSSIBLE;
 	}
 
@@ -1830,6 +1839,7 @@ Item* Game::findItemOfType(const Cylinder* cylinder, uint16_t itemId, bool depth
 bool Game::removeMoney(Cylinder* cylinder, uint64_t money, uint32_t flags /*= 0*/, bool useBalance /*= false*/)
 {
 	if (cylinder == nullptr) {
+		SPDLOG_ERROR("[{}] cylinder is nullptr", __FUNCTION__);
 		return false;
 	}
 	if (money == 0) {
@@ -1911,6 +1921,10 @@ bool Game::removeMoney(Cylinder* cylinder, uint64_t money, uint32_t flags /*= 0*
 
 void Game::addMoney(Cylinder* cylinder, uint64_t money, uint32_t flags /*= 0*/)
 {
+	if (cylinder == nullptr) {
+		SPDLOG_ERROR("[{}] cylinder is nullptr", __FUNCTION__);
+		return;
+	}
 	if (money == 0) {
 		return;
 	}
@@ -2570,7 +2584,7 @@ void Game::playerMove(uint32_t playerId, Direction direction)
 
 bool Game::playerBroadcastMessage(Player* player, const std::string& text) const
 {
-	if (!player->hasFlag(PlayerFlag_CanBroadcast)) {
+	if (!player->hasFlag(PlayerFlags_t::CanBroadcast)) {
 		return false;
 	}
 
@@ -3414,8 +3428,7 @@ void Game::playerWrapableItem(uint32_t playerId, const Position& pos, uint8_t st
 	const ItemAttributes::CustomAttribute* attr = item->getCustomAttribute("unWrapId");
 	uint16_t unWrapId = 0;
 	if (attr != nullptr) {
-		uint32_t tmp = static_cast<uint32_t>(boost::get<int64_t>(attr->value));
-		unWrapId = (uint16_t)tmp;
+		unWrapId = static_cast<uint16_t>(attr->getInt());
 	}
 
 	// Prevent to wrap a filled bath tube
@@ -3432,10 +3445,10 @@ void Game::playerWrapableItem(uint32_t playerId, const Position& pos, uint8_t st
 		uint16_t oldItemID = item->getID();
 		addMagicEffect(item->getPosition(), CONST_ME_POFF);
 		Item* newItem = transformItem(item, ITEM_DECORATION_KIT);
-		ItemAttributes::CustomAttribute val;
-		val.set<int64_t>(oldItemID);
+		ItemAttributes::CustomAttribute customAttribute;
+		customAttribute.setInt64(oldItemID);
 		std::string key = "unWrapId";
-		newItem->setCustomAttribute(key, val);
+		newItem->setCustomAttribute(key, customAttribute);
 		item->setSpecialDescription("Unwrap it in your own house to create a <" + itemName + ">.");
 		if (hiddenCharges > 0) {
 			item->setDate(hiddenCharges);
@@ -3620,7 +3633,7 @@ void Game::playerStashWithdraw(uint32_t playerId, uint16_t itemId, uint32_t coun
 		return;
 	}
 
-	if (player->hasFlag(PlayerFlag_CannotPickupItem)) {
+	if (player->hasFlag(PlayerFlags_t::CannotPickupItem)) {
 		return;
 	}
 
@@ -4749,14 +4762,14 @@ void Game::playerRequestAddVip(uint32_t playerId, const std::string& name)
 			return;
 		}
 
-		if (specialVip && !player->hasFlag(PlayerFlag_SpecialVIP)) {
+		if (specialVip && !player->hasFlag(PlayerFlags_t::SpecialVIP)) {
 			player->sendTextMessage(MESSAGE_FAILURE, "You can not add this player.");
 			return;
 		}
 
 		player->addVIP(guid, formattedName, VIPSTATUS_OFFLINE);
 	} else {
-		if (vipPlayer->hasFlag(PlayerFlag_SpecialVIP) && !player->hasFlag(PlayerFlag_SpecialVIP)) {
+		if (vipPlayer->hasFlag(PlayerFlags_t::SpecialVIP) && !player->hasFlag(PlayerFlags_t::SpecialVIP)) {
 			player->sendTextMessage(MESSAGE_FAILURE, "You can not add this player.");
 			return;
 		}
@@ -5117,7 +5130,7 @@ bool Game::playerSpeakTo(Player* player, SpeakClasses type, const std::string& r
 		return false;
 	}
 
-	if (type == TALKTYPE_PRIVATE_RED_TO && (player->hasFlag(PlayerFlag_CanTalkRedPrivate) || player->getAccountType() >= account::AccountType::ACCOUNT_TYPE_GAMEMASTER)) {
+	if (type == TALKTYPE_PRIVATE_RED_TO && (player->hasFlag(PlayerFlags_t::CanTalkRedPrivate) || player->getAccountType() >= account::AccountType::ACCOUNT_TYPE_GAMEMASTER)) {
 		type = TALKTYPE_PRIVATE_RED_FROM;
 	} else {
 		type = TALKTYPE_PRIVATE_FROM;
