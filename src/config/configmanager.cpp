@@ -175,6 +175,7 @@ bool ConfigManager::load() {
 	boolean[TOGGLE_DOWNLOAD_MAP] = getGlobalBoolean(L, "toggleDownloadMap", false);
 	boolean[USE_ANY_DATAPACK_FOLDER] = getGlobalBoolean(L, "useAnyDatapackFolder", false);
 	boolean[INVENTORY_GLOW] = getGlobalBoolean(L, "inventoryGlowOnFiveBless", false);
+	boolean[XP_DISPLAY_MODE] = getGlobalBoolean(L, "experienceDisplayRates", true);
 
 	string[DEFAULT_PRIORITY] = getGlobalString(L, "defaultPriority", "high");
 	string[SERVER_NAME] = getGlobalString(L, "serverName", "");
@@ -202,6 +203,7 @@ bool ConfigManager::load() {
 	integer[RATE_LOOT] = getGlobalNumber(L, "rateLoot", 1);
 	integer[RATE_MAGIC] = getGlobalNumber(L, "rateMagic", 1);
 	integer[RATE_SPAWN] = getGlobalNumber(L, "rateSpawn", 1);
+	integer[RATE_KILLING_IN_THE_NAME_OF_POINTS] = getGlobalNumber(L, "rateKillingInTheNameOfPoints", 1);
 	integer[HOUSE_PRICE] = getGlobalNumber(L, "housePriceEachSQM", 1000);
 	integer[HOUSE_BUY_LEVEL] = getGlobalNumber(L, "houseBuyLevel", 0);
 	integer[ACTIONS_DELAY_INTERVAL] = getGlobalNumber(L, "timeBetweenActions", 200);
