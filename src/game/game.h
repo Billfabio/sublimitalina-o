@@ -214,6 +214,9 @@ class Game {
 		void loadPlayersRecord();
 		void checkPlayersRecord();
 
+		void sendSingleSoundEffect(const Position &pos, SoundEffect_t soundId, Creature* actor = nullptr);
+		void sendDoubleSoundEffect(const Position &pos, SoundEffect_t mainSoundEffect, SoundEffect_t secondarySoundEffect, Creature* actor = nullptr);
+
 		void sendGuildMotd(uint32_t playerId);
 		void kickPlayer(uint32_t playerId, bool displayEffect);
 		void playerReportBug(uint32_t playerId, const std::string &message, const Position &position, uint8_t category);
@@ -242,6 +245,8 @@ class Game {
 		void playerSetBossPodium(uint32_t playerId, uint32_t bossRaceId, const Position &pos, uint8_t stackPos, const uint16_t itemId, uint8_t direction, uint8_t podiumVisible, uint8_t bossVisible);
 		void playerRotatePodium(uint32_t playerId, const Position &pos, uint8_t stackPos, const uint16_t itemId);
 
+		void playerRequestInventoryImbuements(uint32_t playerId, bool isTrackerOpen);
+
 		bool addItemStoreInbox(const Player* player, uint32_t itemId);
 
 		void playerReportRuleViolationReport(uint32_t playerId, const std::string &targetName, uint8_t reportType, uint8_t reportReason, const std::string &comment, const std::string &translation);
@@ -249,8 +254,6 @@ class Game {
 		void playerCyclopediaCharacterInfo(Player* player, uint32_t characterID, CyclopediaCharacterInfoType_t characterInfoType, uint16_t entriesPerPage, uint16_t page);
 
 		void playerHighscores(Player* player, HighscoreType_t type, uint8_t category, uint32_t vocation, const std::string &worldName, uint16_t page, uint8_t entriesPerPage);
-
-		void playerTournamentLeaderboard(uint32_t playerId, uint8_t leaderboardType);
 
 		void updatePlayerSaleItems(uint32_t playerId);
 
@@ -356,6 +359,7 @@ class Game {
 		void parsePlayerExtendedOpcode(uint32_t playerId, uint8_t opcode, const std::string &buffer);
 
 		static void updatePremium(account::Account &account);
+		void updatePlayerHelpers(Player* player);
 
 		void cleanup();
 		void shutdown();
