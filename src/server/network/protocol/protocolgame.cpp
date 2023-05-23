@@ -297,10 +297,11 @@ void ProtocolGame::release() {
 
 void ProtocolGame::login(const std::string &name, uint32_t accountId, OperatingSystem_t operatingSystem) {
 	// dispatcher thread
-	Player* foundPlayer = g_game().getPlayerByName(name);
+	Player* foundPlayer = g_game().getPlayerUniqueLogin(name);
 	if (!foundPlayer) {
 		player = new Player(getThis());
 		player->setName(name);
+		g_game().addPlayerUniqueLogin(player);
 
 		player->incrementReferenceCounter();
 		player->setID();
@@ -405,20 +406,20 @@ void ProtocolGame::login(const std::string &name, uint32_t accountId, OperatingS
 			foundPlayer->disconnect();
 			foundPlayer->isConnecting = true;
 
-			eventConnect = g_scheduler().addEvent(createSchedulerTask(1000, std::bind(&ProtocolGame::connect, getThis(), foundPlayer->getID(), operatingSystem)));
+			eventConnect = g_scheduler().addEvent(createSchedulerTask(1000, std::bind(&ProtocolGame::connect, getThis(), foundPlayer->getName(), operatingSystem)));
 		} else {
-			connect(foundPlayer->getID(), operatingSystem);
+			connect(foundPlayer->getName(), operatingSystem);
 		}
 	}
 	OutputMessagePool::getInstance().addProtocolToAutosend(shared_from_this());
 	sendBosstiaryCooldownTimer();
 }
 
-void ProtocolGame::connect(uint32_t playerId, OperatingSystem_t operatingSystem) {
+void ProtocolGame::connect(const std::string &playerName, OperatingSystem_t operatingSystem) {
 	eventConnect = 0;
 
-	Player* foundPlayer = g_game().getPlayerByID(playerId);
-	if (!foundPlayer || foundPlayer->client) {
+	Player* foundPlayer = g_game().getPlayerUniqueLogin(playerName);
+	if (!foundPlayer) {
 		disconnectClient("You are already logged in.");
 		return;
 	}
@@ -431,6 +432,7 @@ void ProtocolGame::connect(uint32_t playerId, OperatingSystem_t operatingSystem)
 
 	player = foundPlayer;
 	player->incrementReferenceCounter();
+	g_game().addPlayerUniqueLogin(player);
 
 	g_chat().removeUserFromAllChannels(*player);
 	player->clearModalWindows();
@@ -452,13 +454,14 @@ void ProtocolGame::logout(bool displayEffect, bool forced) {
 	}
 
 	bool removePlayer = !player->isRemoved() && !forced;
+	auto tile = player->getTile();
 	if (removePlayer && !player->isAccessPlayer()) {
-		if (player->getTile()->hasFlag(TILESTATE_NOLOGOUT)) {
+		if (tile && tile->hasFlag(TILESTATE_NOLOGOUT)) {
 			player->sendCancelMessage(RETURNVALUE_YOUCANNOTLOGOUTHERE);
 			return;
 		}
 
-		if (!player->getTile()->hasFlag(TILESTATE_PROTECTIONZONE) && player->hasCondition(CONDITION_INFIGHT)) {
+		if (tile && !tile->hasFlag(TILESTATE_PROTECTIONZONE) && player->hasCondition(CONDITION_INFIGHT)) {
 			player->sendCancelMessage(RETURNVALUE_YOUMAYNOTLOGOUTDURINGAFIGHT);
 			return;
 		}
@@ -492,7 +495,7 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage &msg) {
 
 	if (oldProtocol) {
 		setChecksumMethod(CHECKSUM_METHOD_ADLER32);
-	} else if (operatingSystem <= CLIENTOS_NEW_MAC) {
+	} else if (operatingSystem <= CLIENTOS_OTCLIENT_MAC) {
 		setChecksumMethod(CHECKSUM_METHOD_SEQUENCE);
 		enableCompression();
 	}
@@ -651,6 +654,12 @@ void ProtocolGame::parsePacket(NetworkMessage &msg) {
 	}
 
 	if (player->isDead() || player->getHealth() <= 0) {
+		// Check player activity on death screen
+		if (m_playerDeathTime == 0) {
+			addGameTask(&Game::playerCheckActivity, player->getName(), 1000);
+			m_playerDeathTime++;
+		}
+
 		g_dispatcher().addTask(createTask(std::bind(&ProtocolGame::parsePacketDead, getThis(), recvbyte)));
 		return;
 	}
@@ -685,6 +694,7 @@ void ProtocolGame::parsePacketDead(uint8_t recvbyte) {
 
 		g_dispatcher().addTask(createTask(std::bind(&ProtocolGame::sendAddCreature, getThis(), player, player->getPosition(), 0, false)));
 		g_dispatcher().addTask(createTask(std::bind(&ProtocolGame::addBless, getThis())));
+		resetPlayerDeathTime();
 		return;
 	}
 
@@ -696,6 +706,10 @@ void ProtocolGame::parsePacketDead(uint8_t recvbyte) {
 }
 
 void ProtocolGame::addBless() {
+	if (!player) {
+		return;
+	}
+
 	std::string bless = player->getBlessingsName();
 	std::ostringstream lostBlesses;
 	(bless.length() == 0) ? lostBlesses << "You lost all your blessings." : lostBlesses << "You are still blessed with " << bless;
@@ -1070,6 +1084,9 @@ void ProtocolGame::parsePacketFromDispatcher(NetworkMessage msg, uint8_t recvbyt
 			break;
 		case 0xF9:
 			parseModalWindowAnswer(msg);
+			break;
+		case 0xFF:
+			parseRewardContainerCollect(msg);
 			break;
 			// case 0xFA: parseStoreOpen(msg); break;
 			// case 0xFB: parseStoreRequestOffers(msg); break;
@@ -2797,6 +2814,30 @@ void ProtocolGame::parseModalWindowAnswer(NetworkMessage &msg) {
 	addGameTask(&Game::playerAnswerModalWindow, player->getID(), id, button, choice);
 }
 
+void ProtocolGame::parseRewardContainerCollect(NetworkMessage &msg) {
+	const auto position = msg.getPosition();
+	auto itemId = msg.get<uint16_t>();
+	auto stackPosition = msg.getByte();
+
+	addGameTask([position, itemId, stackPosition, this](Game* game, uint32_t playerId) {
+		try {
+			// Try to run the reward collect asynchronously
+			auto future = std::async(std::launch::async, &Game::playerRewardChestCollect, game, playerId, position, itemId, stackPosition, 0);
+			// Waits for the asynchronous operation to complete
+			future.wait();
+		} catch (std::system_error &e) {
+			game->playerRewardChestCollect(playerId, position, itemId, stackPosition, 200);
+			SPDLOG_WARN("Failed to create a new thread for asynchronous reward collect, running synchronously: {}", e.what());
+			player->sendTextMessage(MESSAGE_EVENT_ADVANCE, "An error occurred while collecting rewards. Please report it to the administrador.");
+		} catch (std::future_error &e) {
+			game->playerRewardChestCollect(playerId, position, itemId, stackPosition, 200);
+			SPDLOG_ERROR("Failed to run asynchronous reward collect: {}", e.what());
+			player->sendTextMessage(MESSAGE_EVENT_ADVANCE, "An error occurred while collecting rewards. Please report it to the administrador.");
+		}
+	},
+				player->getID());
+}
+
 void ProtocolGame::parseBrowseField(NetworkMessage &msg) {
 	const Position &pos = msg.getPosition();
 	addGameTask(&Game::playerBrowseField, player->getID(), pos);
@@ -2877,13 +2918,22 @@ void ProtocolGame::sendCreatureIcon(const Creature* creature) {
 	// Type 14 for this
 	msg.addByte(14);
 	// 0 = no icon, 1 = we'll send an icon
-	msg.addByte(icon != CREATUREICON_NONE);
+	auto creaturePlayer = creature->getPlayer();
+	auto useHazard = g_configManager().getBoolean(TOGGLE_HAZARDSYSTEM);
 	if (icon != CREATUREICON_NONE) {
+		msg.addByte(icon != CREATUREICON_NONE); // Has icon
 		msg.addByte(icon);
 		// Creature update
 		msg.addByte(1);
 		// Used for the life in the new quest
 		msg.add<uint16_t>(0);
+	} else if (useHazard && !oldProtocol && creaturePlayer && creaturePlayer->getHazardSystemReference() > 0 && creaturePlayer->getHazardSystemPoints() > 0) {
+		msg.addByte(0x01); // Has icon
+		msg.addByte(22); // Hazard icon
+		msg.addByte(0);
+		msg.add<uint16_t>(creaturePlayer->getHazardSystemPoints());
+	} else {
+		msg.addByte(0x00); // Has icon
 	}
 	writeToOutputBuffer(msg);
 }
@@ -2931,13 +2981,18 @@ void ProtocolGame::sendCreatureShield(const Creature* creature) {
 }
 
 void ProtocolGame::sendCreatureEmblem(const Creature* creature) {
-	if (!canSee(creature) || oldProtocol) {
+	if (!creature || !canSee(creature) || oldProtocol) {
+		return;
+	}
+
+	auto tile = creature->getTile();
+	if (!tile) {
 		return;
 	}
 
 	// Remove creature from client and re-add to update
 	Position pos = creature->getPosition();
-	int32_t stackpos = creature->getTile()->getClientIndexOfCreature(player, creature);
+	int32_t stackpos = tile->getClientIndexOfCreature(player, creature);
 	sendRemoveTileThing(pos, stackpos);
 	NetworkMessage msg;
 	msg.addByte(0x6A);
@@ -4123,7 +4178,7 @@ void ProtocolGame::sendCoinBalance() {
 	msg.addByte(0x01);
 
 	msg.add<uint32_t>(player->coinBalance); // Normal Coins
-	msg.add<uint32_t>(player->coinBalance); // Transferable Coins
+	msg.add<uint32_t>(player->coinTransferableBalance); // Transferable Coins
 
 	if (!oldProtocol) {
 		msg.add<uint32_t>(player->coinBalance); // Reserved Auction Coins
@@ -4145,7 +4200,10 @@ void ProtocolGame::updateCoinBalance() {
 				account.LoadAccountDB(threadPlayer->getAccount());
 				uint32_t coins;
 				account.GetCoins(&coins);
+				uint32_t transfercoins;
+				account.GetTransferableCoins(&transfercoins);
 				threadPlayer->coinBalance = coins;
+				threadPlayer->coinTransferableBalance = transfercoins;
 				threadPlayer->sendCoinBalance();
 			}
 		},
@@ -6469,6 +6527,7 @@ void ProtocolGame::AddCreature(NetworkMessage &msg, const Creature* creature, bo
 
 	CreatureIcon_t icon;
 	auto sendIcon = false;
+	auto useHazard = g_configManager().getBoolean(TOGGLE_HAZARDSYSTEM);
 	if (!oldProtocol) {
 		if (otherPlayer) {
 			icon = creature->getIcon();
@@ -6478,6 +6537,10 @@ void ProtocolGame::AddCreature(NetworkMessage &msg, const Creature* creature, bo
 				msg.addByte(icon);
 				msg.addByte(1);
 				msg.add<uint16_t>(0);
+			} else if (useHazard && otherPlayer->getHazardSystemReference() > 0 && otherPlayer->getHazardSystemPoints() > 0) {
+				msg.addByte(22); // Hazard icon
+				msg.addByte(0);
+				msg.add<uint16_t>(otherPlayer->getHazardSystemPoints());
 			}
 		} else {
 			if (auto monster = creature->getMonster();
@@ -7239,10 +7302,15 @@ void ProtocolGame::sendItemsPrice() {
 }
 
 void ProtocolGame::reloadCreature(const Creature* creature) {
-	if (!canSee(creature))
+	if (!creature || !canSee(creature))
 		return;
 
-	uint32_t stackpos = creature->getTile()->getClientIndexOfCreature(player, creature);
+	auto tile = creature->getTile();
+	if (!tile) {
+		return;
+	}
+
+	uint32_t stackpos = tile->getClientIndexOfCreature(player, creature);
 
 	if (stackpos >= 10)
 		return;
@@ -7469,10 +7537,15 @@ void ProtocolGame::sendUpdateCreature(const Creature* creature) {
 		return;
 	}
 
+	auto tile = creature->getTile();
+	if (!tile) {
+		return;
+	}
+
 	if (!canSee(creature))
 		return;
 
-	int32_t stackPos = creature->getTile()->getClientIndexOfCreature(player, creature);
+	int32_t stackPos = tile->getClientIndexOfCreature(player, creature);
 	if (stackPos == -1 || stackPos >= 10) {
 		return;
 	}
@@ -7889,5 +7962,23 @@ void ProtocolGame::sendDoubleSoundEffect(
 	msg.add<uint16_t>(static_cast<uint16_t>(secondarySoundId)); // Sound id
 
 	msg.addByte(0x00); // Breaking the effects loop
+	writeToOutputBuffer(msg);
+}
+
+void ProtocolGame::reloadHazardSystemIcon(uint16_t reference) {
+	if (oldProtocol || !g_configManager().getBoolean(TOGGLE_HAZARDSYSTEM)) {
+		return;
+	}
+
+	NetworkMessage msg;
+	msg.addByte(0x8B);
+	msg.add<uint32_t>(player->getID());
+	msg.addByte(14);
+	msg.addByte(reference != 0 ? 0x01 : 0x00);
+	if (reference != 0) {
+		msg.addByte(22); // Icon ID
+		msg.addByte(0);
+		msg.add<uint16_t>(player->getHazardSystemPoints());
+	}
 	writeToOutputBuffer(msg);
 }
