@@ -326,6 +326,7 @@ bool ConfigManager::load() {
 	integer[HAZARD_LOOT_BONUS_MULTIPLIER] = getGlobalNumber(L, "hazardLootBonusMultiplier", 2);
 	integer[HAZARD_PODS_DAMAGE] = getGlobalNumber(L, "hazardPodsDamage", 5);
 	integer[HAZARD_SPAWN_PLUNDER_MULTIPLIER] = getGlobalNumber(L, "hazardSpawnPlunderMultiplier", 25);
+	integer[LOW_LEVEL_BONUS_EXP] = getGlobalNumber(L, "lowLevelBonusExp", 50);
 
 	loaded = true;
 	lua_close(L);
@@ -344,7 +345,7 @@ static std::string dummyStr;
 
 const std::string &ConfigManager::getString(stringConfig_t what) const {
 	if (what >= LAST_STRING_CONFIG) {
-		SPDLOG_WARN("[ConfigManager::getString] - Accessing invalid index: {}", what);
+		SPDLOG_WARN("[ConfigManager::getString] - Accessing invalid index: {}", fmt::underlying(what));
 		return dummyStr;
 	}
 	return string[what];
@@ -352,7 +353,7 @@ const std::string &ConfigManager::getString(stringConfig_t what) const {
 
 int32_t ConfigManager::getNumber(integerConfig_t what) const {
 	if (what >= LAST_INTEGER_CONFIG) {
-		SPDLOG_WARN("[ConfigManager::getNumber] - Accessing invalid index: {}", what);
+		SPDLOG_WARN("[ConfigManager::getNumber] - Accessing invalid index: {}", fmt::underlying(what));
 		return 0;
 	}
 	return integer[what];
@@ -360,7 +361,7 @@ int32_t ConfigManager::getNumber(integerConfig_t what) const {
 
 int16_t ConfigManager::getShortNumber(integerConfig_t what) const {
 	if (what >= LAST_INTEGER_CONFIG) {
-		SPDLOG_WARN("[ConfigManager::getShortNumber] - Accessing invalid index: {}", what);
+		SPDLOG_WARN("[ConfigManager::getShortNumber] - Accessing invalid index: {}", fmt::underlying(what));
 		return 0;
 	}
 	return integer[what];
@@ -368,7 +369,7 @@ int16_t ConfigManager::getShortNumber(integerConfig_t what) const {
 
 bool ConfigManager::getBoolean(booleanConfig_t what) const {
 	if (what >= LAST_BOOLEAN_CONFIG) {
-		SPDLOG_WARN("[ConfigManager::getBoolean] - Accessing invalid index: {}", what);
+		SPDLOG_WARN("[ConfigManager::getBoolean] - Accessing invalid index: {}", fmt::underlying(what));
 		return false;
 	}
 	return boolean[what];
@@ -376,7 +377,7 @@ bool ConfigManager::getBoolean(booleanConfig_t what) const {
 
 float ConfigManager::getFloat(floatingConfig_t what) const {
 	if (what >= LAST_FLOATING_CONFIG) {
-		SPDLOG_WARN("[ConfigManager::getFLoat] - Accessing invalid index: {}", what);
+		SPDLOG_WARN("[ConfigManager::getFLoat] - Accessing invalid index: {}", fmt::underlying(what));
 		return 0;
 	}
 	return floating[what];
