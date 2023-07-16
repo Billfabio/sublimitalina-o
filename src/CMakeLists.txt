@@ -134,6 +134,7 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE pch.hpp)
 # Packages / Libs
 # *****************************************************************************
 find_package(asio CONFIG REQUIRED)
+find_package(absl CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
 find_package(GMP REQUIRED)
 find_package(jsoncpp CONFIG REQUIRED)
@@ -143,6 +144,7 @@ find_package(magic_enum CONFIG REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(pugixml CONFIG REQUIRED)
 find_package(spdlog REQUIRED)
+find_package(unofficial-argon2 CONFIG REQUIRED)
 find_package(unofficial-libmariadb CONFIG REQUIRED)
 find_package(mio REQUIRED)
 find_package(Threads REQUIRED)
@@ -178,6 +180,7 @@ PRIVATE
 	creatures/players/management/ban.cpp
 	creatures/players/management/waitlist.cpp
 	creatures/players/player.cpp
+	creatures/players/wheel/player_wheel.cpp
 	creatures/players/vocations/vocation.cpp
 	database/database.cpp
 	database/databasemanager.cpp
@@ -190,6 +193,7 @@ PRIVATE
 	game/scheduling/events_scheduler.cpp
 	game/scheduling/tasks.cpp
 	io/fileloader.cpp
+	io/io_wheel.cpp
 	io/iobestiary.cpp
 	io/io_bosstiary.cpp
 	io/ioguild.cpp
@@ -286,6 +290,8 @@ PRIVATE
 	map/house/housetile.cpp
 	map/map.cpp
 	otserv.cpp
+	pch.cpp
+	security/argon.cpp
 	security/rsa.cpp
 	server/network/connection/connection.cpp
 	server/network/message/networkmessage.cpp
@@ -341,6 +347,7 @@ if (MSVC)
 			${LUAJIT_LIBRARIES}
 			${MYSQL_CLIENT_LIBS}
 			asio::asio
+			absl::any absl::log absl::base absl::bits
 			CURL::libcurl
 			fmt::fmt
 			magic_enum::magic_enum
@@ -348,6 +355,7 @@ if (MSVC)
 			protobuf::libprotobuf
 			pugixml::pugixml
 			spdlog::spdlog
+			unofficial::argon2::libargon2
 			unofficial::libmariadb
 			unofficial::mariadbclient
 			ZLIB::ZLIB
@@ -368,6 +376,7 @@ else()
 			${LUAJIT_LIBRARIES}
 			${GMP_LIBRARIES}
 			asio::asio
+			absl::any absl::log absl::base absl::bits
 			CURL::libcurl
 			fmt::fmt
 			jsoncpp_static
@@ -376,6 +385,7 @@ else()
 			protobuf::libprotobuf
 			pugixml::pugixml
 			spdlog::spdlog
+			unofficial::argon2::libargon2
 			unofficial::libmariadb
 			unofficial::mariadbclient
 			ZLIB::ZLIB

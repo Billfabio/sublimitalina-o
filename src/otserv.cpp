@@ -224,6 +224,9 @@ int main(int argc, char* argv[]) {
 
 	if (serviceManager.is_running()) {
 		SPDLOG_INFO("{} {}", g_configManager().getString(SERVER_NAME), "server online!");
+		if (isDevMode()) {
+			spdlog::warn("Atteption, server running in development mode... Additional logs are active!");
+		}
 		serviceManager.run();
 	} else {
 		SPDLOG_ERROR("No services running. The server is NOT online!");
@@ -245,7 +248,7 @@ void mainLoader(int, char*[], ServiceManager* services) {
 
 	srand(static_cast<unsigned int>(OTSYS_TIME()));
 #ifdef _WIN32
-	SetConsoleTitle(STATUS_SERVER_NAME);
+	SetConsoleTitleA(STATUS_SERVER_NAME);
 #endif
 #if defined(GIT_RETRIEVED_STATE) && GIT_RETRIEVED_STATE
 	SPDLOG_INFO("{} - Version [{}] dated [{}]", STATUS_SERVER_NAME, STATUS_SERVER_VERSION, GIT_COMMIT_DATE_ISO8601);

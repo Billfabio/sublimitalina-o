@@ -173,14 +173,6 @@ class ItemProperties {
 			return attributePtr;
 		}
 
-		const std::underlying_type_t<ItemAttribute_t> &getAttributeBits() const {
-			static std::underlying_type_t<ItemAttribute_t> emptyType = {};
-			if (!attributePtr) {
-				return emptyType;
-			}
-
-			return attributePtr->getAttributeBits();
-		}
 		const std::vector<Attributes> &getAttributeVector() const {
 			static std::vector<Attributes> emptyVector = {};
 			if (!attributePtr) {
@@ -448,6 +440,9 @@ class Item : virtual public Thing, public ItemProperties {
 		bool isQuiver() const {
 			return items[id].isQuiver();
 		}
+		bool isSpellBook() const {
+			return items[id].isSpellBook();
+		}
 
 		const std::string &getName() const {
 			if (hasAttribute(ItemAttribute_t::NAME)) {
@@ -466,6 +461,13 @@ class Item : virtual public Thing, public ItemProperties {
 				return getString(ItemAttribute_t::ARTICLE);
 			}
 			return items[id].article;
+		}
+
+		uint8_t getStackSize() const {
+			if (isStackable()) {
+				return items[id].stackSize;
+			}
+			return 1;
 		}
 
 		// get the number of items
