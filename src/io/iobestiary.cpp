@@ -15,11 +15,10 @@
 #include "creatures/monsters/monsters.h"
 #include "creatures/players/player.h"
 
-bool IOBestiary::parseCharmCombat(Charm* charm, Player* player, Creature* target, int32_t realDamage) {
+bool IOBestiary::parseCharmCombat(Charm* charm, Player* player, Creature* target, int32_t realDamage, bool dueToPotion, bool checkArmor) {
 	if (!charm || !player || !target) {
 		return false;
 	}
-
 	CombatParams charmParams;
 	CombatDamage charmDamage;
 	if (charm->type == CHARM_OFFENSIVE) {
@@ -34,7 +33,10 @@ bool IOBestiary::parseCharmCombat(Charm* charm, Player* player, Creature* target
 		charmDamage.primary.type = charm->dmgtype;
 		charmDamage.primary.value = ((-maxHealth * (charm->percent)) / 100);
 		charmDamage.extension = true;
-		charmDamage.exString = charm->logMsg;
+		if (!charmDamage.exString.empty()) {
+			charmDamage.exString += ", ";
+		}
+		charmDamage.exString += charm->logMsg + (dueToPotion ? " due to active charm upgrade" : "");
 
 		charmParams.impactEffect = charm->effect;
 		charmParams.combatType = charmDamage.primary.type;
@@ -47,14 +49,15 @@ bool IOBestiary::parseCharmCombat(Charm* charm, Player* player, Creature* target
 	} else if (charm->type == CHARM_DEFENSIVE) {
 		switch (charm->id) {
 			case CHARM_PARRY: {
-				charmDamage.primary.type = charm->dmgtype;
+				charmDamage.primary.type = COMBAT_NEUTRALDAMAGE;
 				charmDamage.primary.value = -realDamage;
 				charmDamage.extension = true;
-				charmDamage.exString = charm->logMsg;
-
-				charmParams.impactEffect = charm->effect;
-				charmParams.combatType = charmDamage.primary.type;
+				if (!charmDamage.exString.empty()) {
+					charmDamage.exString += ", ";
+				}
+				charmDamage.exString += charm->logMsg + (dueToPotion ? " due to active charm upgrade" : "");
 				charmParams.aggressive = true;
+				charmParams.blockedByArmor = checkArmor;
 				break;
 			}
 			case CHARM_DODGE: {
@@ -108,9 +111,9 @@ Charm* IOBestiary::getBestiaryCharm(charmRune_t activeCharm, bool force /*= fals
 	return nullptr;
 }
 
-std::map<uint16_t, std::string> IOBestiary::findRaceByName(const std::string &race, bool Onlystring /*= true*/, BestiaryType_t raceNumber /*= BESTY_RACE_NONE*/) const {
-	std::map<uint16_t, std::string> best_list = g_game().getBestiaryList();
-	std::map<uint16_t, std::string> race_list;
+phmap::btree_map<uint16_t, std::string> IOBestiary::findRaceByName(const std::string &race, bool Onlystring /*= true*/, BestiaryType_t raceNumber /*= BESTY_RACE_NONE*/) const {
+	phmap::btree_map<uint16_t, std::string> best_list = g_game().getBestiaryList();
+	phmap::btree_map<uint16_t, std::string> race_list;
 
 	if (Onlystring) {
 		for (auto it : best_list) {
@@ -183,7 +186,7 @@ uint16_t IOBestiary::getBestiaryRaceUnlocked(Player* player, BestiaryType_t race
 	}
 
 	uint16_t count = 0;
-	std::map<uint16_t, std::string> besty_l = g_game().getBestiaryList();
+	phmap::btree_map<uint16_t, std::string> besty_l = g_game().getBestiaryList();
 
 	for (auto it : besty_l) {
 		const MonsterType* mtype = g_monsters().getMonsterType(it.second);
@@ -344,8 +347,8 @@ void IOBestiary::sendBuyCharmRune(Player* player, charmRune_t runeID, uint8_t ac
 	return;
 }
 
-std::map<uint8_t, int16_t> IOBestiary::getMonsterElements(MonsterType* mtype) const {
-	std::map<uint8_t, int16_t> defaultMap = {};
+phmap::btree_map<uint8_t, int16_t> IOBestiary::getMonsterElements(MonsterType* mtype) const {
+	phmap::btree_map<uint8_t, int16_t> defaultMap = {};
 	for (uint8_t i = 0; i <= 7; i++) {
 		defaultMap[i] = 100;
 	}
@@ -382,8 +385,8 @@ std::map<uint8_t, int16_t> IOBestiary::getMonsterElements(MonsterType* mtype) co
 	return defaultMap;
 }
 
-std::map<uint16_t, uint32_t> IOBestiary::getBestiaryKillCountByMonsterIDs(Player* player, std::map<uint16_t, std::string> mtype_list) const {
-	std::map<uint16_t, uint32_t> raceMonsters = {};
+phmap::btree_map<uint16_t, uint32_t> IOBestiary::getBestiaryKillCountByMonsterIDs(Player* player, phmap::btree_map<uint16_t, std::string> mtype_list) const {
+	phmap::btree_map<uint16_t, uint32_t> raceMonsters = {};
 	for (auto it : mtype_list) {
 		uint16_t raceid = it.first;
 		uint32_t thisKilled = player->getBestiaryKillCount(raceid);
@@ -394,16 +397,16 @@ std::map<uint16_t, uint32_t> IOBestiary::getBestiaryKillCountByMonsterIDs(Player
 	return raceMonsters;
 }
 
-std::list<uint16_t> IOBestiary::getBestiaryFinished(Player* player) const {
-	std::list<uint16_t> finishedMonsters = {};
-	std::map<uint16_t, std::string> besty_l = g_game().getBestiaryList();
+std::vector<uint16_t> IOBestiary::getBestiaryFinished(Player* player) const {
+	std::vector<uint16_t> finishedMonsters = {};
+	phmap::btree_map<uint16_t, std::string> besty_l = g_game().getBestiaryList();
 
 	for (auto nt : besty_l) {
 		uint16_t raceid = nt.first;
 		uint32_t thisKilled = player->getBestiaryKillCount(raceid);
 		const MonsterType* mtype = g_monsters().getMonsterType(nt.second);
 		if (mtype && thisKilled >= mtype->info.bestiaryToUnlock) {
-			finishedMonsters.push_front(raceid);
+			finishedMonsters.push_back(raceid);
 		}
 	}
 	return finishedMonsters;

@@ -40,7 +40,7 @@ struct TextMessage {
 		struct
 		{
 				int32_t value = 0;
-				TextColor_t color;
+				TextColor_t color = TEXTCOLOR_NONE;
 		} primary, secondary;
 };
 
@@ -189,7 +189,7 @@ class ProtocolGame final : public Protocol {
 		void parseCloseImbuementWindow(NetworkMessage &msg);
 
 		void parseModalWindowAnswer(NetworkMessage &msg);
-		void parseRewardContainerCollect(NetworkMessage &msg);
+		void parseRewardChestCollect(NetworkMessage &msg);
 
 		void parseBrowseField(NetworkMessage &msg);
 		void parseSeekInContainer(NetworkMessage &msg);
@@ -266,14 +266,16 @@ class ProtocolGame final : public Protocol {
 		void parseSendBosstiary();
 		void parseSendBosstiarySlots();
 		void parseBosstiarySlot(NetworkMessage &msg);
-		void sendBossPodiumWindow(const Item* podium, const Position &position, uint16_t itemId, uint8_t stackPos);
-		void parseSetBossPodium(NetworkMessage &msg) const;
+		void sendPodiumDetails(NetworkMessage &msg, const std::vector<uint16_t> &toSendMonsters, bool isBoss);
+		void sendMonsterPodiumWindow(const Item* podium, const Position &position, uint16_t itemId, uint8_t stackPos);
+		void parseSetMonsterPodium(NetworkMessage &msg) const;
 		void sendBosstiaryCooldownTimer();
 		void sendBosstiaryEntryChanged(uint32_t bossid);
 
-		void sendDistanceShoot(const Position &from, const Position &to, uint8_t type);
-		void sendMagicEffect(const Position &pos, uint8_t type);
-		void removeMagicEffect(const Position &pos, uint8_t type);
+		void sendAllowBugReport();
+		void sendDistanceShoot(const Position &from, const Position &to, uint16_t type);
+		void sendMagicEffect(const Position &pos, uint16_t type);
+		void removeMagicEffect(const Position &pos, uint16_t type);
 		void sendRestingStatus(uint8_t protection);
 		void sendCreatureHealth(const Creature* creature);
 		void sendPartyCreatureUpdate(const Creature* target);
@@ -331,7 +333,7 @@ class ProtocolGame final : public Protocol {
 		void sendGameNews();
 		void sendResourcesBalance(uint64_t money = 0, uint64_t bank = 0, uint64_t preyCards = 0, uint64_t taskHunting = 0, uint64_t forgeDust = 0, uint64_t forgeSliver = 0, uint64_t forgeCores = 0);
 		void sendResourceBalance(Resource_t resourceType, uint64_t value);
-		void sendSaleItemList(const std::vector<ShopBlock> &shopVector, const std::map<uint16_t, uint16_t> &inventoryMap);
+		void sendSaleItemList(const std::vector<ShopBlock> &shopVector, const phmap::btree_map<uint16_t, uint16_t> &inventoryMap);
 		void sendMarketEnter(uint32_t depotId);
 		void updateCoinBalance();
 		void sendMarketLeave();
@@ -455,12 +457,12 @@ class ProtocolGame final : public Protocol {
 		void sendFeatures();
 
 		void parseInventoryImbuements(NetworkMessage &msg);
-		void sendInventoryImbuements(const std::map<Slots_t, Item*> items);
+		void sendInventoryImbuements(const phmap::btree_map<Slots_t, Item*> items);
 
 		// reloadCreature
 		void reloadCreature(const Creature* creature);
 
-		void getForgeInfoMap(const Item* item, std::map<uint16_t, std::map<uint8_t, uint16_t>> &itemsMap) const;
+		void getForgeInfoMap(const Item* item, phmap::btree_map<uint16_t, phmap::btree_map<uint8_t, uint16_t>> &itemsMap) const;
 
 		// Wheel
 		void parseOpenWheel(NetworkMessage &msg);

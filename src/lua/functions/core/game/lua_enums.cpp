@@ -89,6 +89,7 @@ void LuaEnums::init(lua_State* L) {
 	initFightModeEnums(L);
 	initItemAttributeEnums(L);
 	initItemTypeEnums(L);
+	initFluidEnums(L);
 	initItemIdEnums(L);
 	initPlayerFlagEnums(L);
 	initReportReasonEnums(L);
@@ -147,6 +148,7 @@ void LuaEnums::initOthersEnums(lua_State* L) {
 	registerEnum(L, LIGHT_STATE_SUNSET);
 	registerEnum(L, LIGHT_STATE_SUNRISE);
 	registerEnum(L, STORAGEVALUE_EMOTE);
+	registerEnum(L, STORAGEVALUE_AUTO_LOOT);
 
 	registerEnum(L, IMMOVABLE_ACTION_ID);
 
@@ -244,6 +246,8 @@ void LuaEnums::initCallbackParamEnums(lua_State* L) {
 	registerEnum(L, CALLBACK_PARAM_SKILLVALUE);
 	registerEnum(L, CALLBACK_PARAM_TARGETTILE);
 	registerEnum(L, CALLBACK_PARAM_TARGETCREATURE);
+	registerEnum(L, CALLBACK_PARAM_CHAINVALUE);
+	registerEnum(L, CALLBACK_PARAM_CHAINPICKER);
 }
 
 void LuaEnums::initCombatEnums(lua_State* L) {
@@ -260,6 +264,7 @@ void LuaEnums::initCombatEnums(lua_State* L) {
 	registerEnum(L, COMBAT_ICEDAMAGE);
 	registerEnum(L, COMBAT_HOLYDAMAGE);
 	registerEnum(L, COMBAT_DEATHDAMAGE);
+	registerEnum(L, COMBAT_NEUTRALDAMAGE);
 }
 
 void LuaEnums::initCombatParamEnums(lua_State* L) {
@@ -404,6 +409,27 @@ void LuaEnums::initConditionParamEnums(lua_State* L) {
 	registerEnum(L, CONDITION_PARAM_BUFF_DAMAGEDEALT);
 	registerEnum(L, CONDITION_PARAM_BUFF_DAMAGERECEIVED);
 	registerEnum(L, CONDITION_PARAM_DRAIN_BODY);
+	registerEnum(L, CONDITION_PARAM_ABSORB_PHYSICALPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_FIREPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_ENERGYPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_ICEPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_EARTHPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_DEATHPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_HOLYPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_LIFEDRAINPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_MANADRAINPERCENT);
+	registerEnum(L, CONDITION_PARAM_ABSORB_DROWNPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_PHYSICALPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_FIREPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_ENERGYPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_ICEPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_EARTHPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_DEATHPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_HOLYPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_LIFEDRAINPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_MANADRAINPERCENT);
+	registerEnum(L, CONDITION_PARAM_INCREASE_DROWNPERCENT);
+	registerEnum(L, CONDITION_PARAM_CHARM_CHANCE_MODIFIER);
 }
 
 void LuaEnums::initConstMeEnums(lua_State* L) {
@@ -777,6 +803,12 @@ void LuaEnums::initItemTypeEnums(lua_State* L) {
 	registerEnum(L, ITEM_TYPE_RETRIEVE);
 	registerEnum(L, ITEM_TYPE_GOLD);
 	registerEnum(L, ITEM_TYPE_UNASSIGNED);
+}
+
+void LuaEnums::initFluidEnums(lua_State* L) {
+	for (auto value : magic_enum::enum_values<Fluids_t>()) {
+		registerEnumClass(L, value);
+	}
 }
 
 void LuaEnums::initItemIdEnums(lua_State* L) {

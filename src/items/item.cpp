@@ -67,9 +67,9 @@ Item* Item::CreateItem(const uint16_t type, uint16_t count /*= 0*/, Position* it
 		newItem->incrementReferenceCounter();
 	} else if (type > 0 && itemPosition) {
 		auto position = *itemPosition;
-		SPDLOG_WARN("[Item::CreateItem] Item with id '{}', in position '{}' not exists in the appearances.dat and cannot be created.", type, position.toString());
+		g_logger().warn("[Item::CreateItem] Item with id '{}', in position '{}' not exists in the appearances.dat and cannot be created.", type, position.toString());
 	} else {
-		SPDLOG_WARN("[Item::CreateItem] Item with id '{}' is not registered and cannot be created.", type);
+		g_logger().warn("[Item::CreateItem] Item with id '{}' is not registered and cannot be created.", type);
 	}
 
 	return newItem;
@@ -108,7 +108,7 @@ void Item::addImbuement(uint8_t slot, uint16_t imbuementId, uint32_t duration) {
 
 	// Checks if the item already has the imbuement category id
 	if (hasImbuementCategoryId(categoryImbuement->id)) {
-		SPDLOG_ERROR("[Item::setImbuement] - An error occurred while player with name {} try to apply imbuement, item already contains imbuement of the same type: {}", player->getName(), imbuement->getName());
+		g_logger().error("[Item::setImbuement] - An error occurred while player with name {} try to apply imbuement, item already contains imbuement of the same type: {}", player->getName(), imbuement->getName());
 		player->sendImbuementResult("An error ocurred, please reopen imbuement window.");
 		return;
 	}
@@ -218,7 +218,7 @@ Item::Item(const Item &i) :
 Item* Item::clone() const {
 	Item* item = Item::CreateItem(id, count);
 	if (item == nullptr) {
-		SPDLOG_ERROR("[{}] item is nullptr", __FUNCTION__);
+		g_logger().error("[{}] item is nullptr", __FUNCTION__);
 		return nullptr;
 	}
 
@@ -316,7 +316,7 @@ Cylinder* Item::getTopParent() {
 		return prevaux;
 	}
 
-	while (aux->getParent() != nullptr) {
+	while (aux && aux->getParent() != nullptr) {
 		prevaux = aux;
 		aux = aux->getParent();
 	}
@@ -334,7 +334,7 @@ const Cylinder* Item::getTopParent() const {
 		return prevaux;
 	}
 
-	while (aux->getParent() != nullptr) {
+	while (aux && aux->getParent() != nullptr) {
 		prevaux = aux;
 		aux = aux->getParent();
 	}
@@ -750,7 +750,7 @@ Attr_ReadValue Item::readAttr(AttrTypes_t attr, PropStream &propStream) {
 		case ATTR_TIER: {
 			uint8_t tier;
 			if (!propStream.read<uint8_t>(tier)) {
-				SPDLOG_ERROR("[{}] failed to read tier", __FUNCTION__);
+				g_logger().error("[{}] failed to read tier", __FUNCTION__);
 				return ATTR_READ_ERROR;
 			}
 
@@ -761,7 +761,7 @@ Attr_ReadValue Item::readAttr(AttrTypes_t attr, PropStream &propStream) {
 		case ATTR_AMOUNT: {
 			uint16_t amount;
 			if (!propStream.read<uint16_t>(amount)) {
-				SPDLOG_ERROR("[{}] failed to read amount", __FUNCTION__);
+				g_logger().error("[{}] failed to read amount", __FUNCTION__);
 				return ATTR_READ_ERROR;
 			}
 
@@ -772,7 +772,7 @@ Attr_ReadValue Item::readAttr(AttrTypes_t attr, PropStream &propStream) {
 		case ATTR_CUSTOM: {
 			uint64_t size;
 			if (!propStream.read<uint64_t>(size)) {
-				SPDLOG_ERROR("[{}] failed to read size", __FUNCTION__);
+				g_logger().error("[{}] failed to read size", __FUNCTION__);
 				return ATTR_READ_ERROR;
 			}
 
@@ -780,13 +780,13 @@ Attr_ReadValue Item::readAttr(AttrTypes_t attr, PropStream &propStream) {
 				// Unserialize custom attribute key type
 				std::string key;
 				if (!propStream.readString(key)) {
-					SPDLOG_ERROR("[{}] failed to read custom type", __FUNCTION__);
+					g_logger().error("[{}] failed to read custom type", __FUNCTION__);
 					return ATTR_READ_ERROR;
 				};
 
 				CustomAttribute customAttribute;
 				if (!customAttribute.unserialize(propStream, __FUNCTION__)) {
-					SPDLOG_ERROR("[{}] failed to read custom value", __FUNCTION__);
+					g_logger().error("[{}] failed to read custom value", __FUNCTION__);
 					return ATTR_READ_ERROR;
 				}
 
@@ -1175,6 +1175,87 @@ Item::getDescriptions(const ItemType &it, const Item* item /*= nullptr*/) {
 				descriptions.emplace_back("Skill Boost", ss.str());
 			}
 
+			if (it.abilities->stats[STAT_MAGICPOINTS]) {
+				ss.str("");
+				ss << std::showpos << it.abilities->stats[STAT_MAGICPOINTS] << std::noshowpos;
+				descriptions.emplace_back("Magic Level", ss.str());
+			}
+
+			for (uint8_t i = 1; i <= 11; i++) {
+				if (it.abilities->specializedMagicLevel[i]) {
+					ss.str("");
+
+					ss << std::showpos << it.abilities->specializedMagicLevel[i] << std::noshowpos;
+					std::string combatName = getCombatName(indexToCombatType(i));
+					combatName[0] = toupper(combatName[0]);
+					descriptions.emplace_back(combatName + " Magic Level", ss.str());
+				}
+			}
+
+			if (it.abilities->magicShieldCapacityFlat || it.abilities->magicShieldCapacityPercent) {
+				ss.str("");
+				ss << std::showpos << it.abilities->magicShieldCapacityFlat << std::noshowpos << " and " << it.abilities->magicShieldCapacityPercent << "%";
+				descriptions.emplace_back("Magic Shield Capacity", ss.str());
+			}
+
+			if (it.abilities->perfectShotRange) {
+				ss.str("");
+				ss << std::showpos << it.abilities->perfectShotDamage << std::noshowpos << " at range " << unsigned(it.abilities->perfectShotRange);
+				descriptions.emplace_back("Perfect Shot", ss.str());
+			}
+
+			if (it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)]) {
+				ss.str("");
+				ss << it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)];
+				descriptions.emplace_back("Damage Reflection", ss.str());
+			}
+
+			if (it.abilities->speed) {
+				ss.str("");
+				ss << std::showpos << (it.abilities->speed >> 1) << std::noshowpos;
+				descriptions.emplace_back("Speed", ss.str());
+			}
+
+			if (it.abilities->cleavePercent) {
+				ss.str("");
+				ss << std::showpos << (it.abilities->cleavePercent) << std::noshowpos << "%";
+				descriptions.emplace_back("Cleave", ss.str());
+			}
+
+			if (it.abilities->conditionSuppressions[CONDITION_DRUNK] != 0) {
+				ss.str("");
+				ss << "Hard Drinking";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			if (it.abilities->invisible) {
+				ss.str("");
+				ss << "Invisibility";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			if (it.abilities->regeneration) {
+				ss.str("");
+				ss << "Faster Regeneration";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			if (it.abilities->manaShield) {
+				ss.str("");
+				ss << "Mana Shield";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			for (size_t i = 0; i < COMBAT_COUNT; ++i) {
+				if (it.abilities->absorbPercent[i] == 0) {
+					continue;
+				}
+
+				ss.str("");
+				ss << getCombatName(indexToCombatType(i)) << ' '
+				   << std::showpos << it.abilities->absorbPercent[i] << std::noshowpos << '%';
+				descriptions.emplace_back("Protection", ss.str());
+			}
 			for (size_t i = 0; i < COMBAT_COUNT; ++i) {
 				if (it.abilities->fieldAbsorbPercent[i] == 0) {
 					continue;
@@ -1185,7 +1266,7 @@ Item::getDescriptions(const ItemType &it, const Item* item /*= nullptr*/) {
 				descriptions.emplace_back("Field Protection", ss.str());
 			}
 
-			if (hasBitSet(CONDITION_DRUNK, it.abilities->conditionSuppressions)) {
+			if (it.abilities->conditionSuppressions[CONDITION_DRUNK] != 0) {
 				ss.str("");
 				ss << "Hard Drinking";
 				descriptions.emplace_back("Skill Boost", ss.str());
@@ -1496,8 +1577,87 @@ Item::getDescriptions(const ItemType &it, const Item* item /*= nullptr*/) {
 
 				skillBoost = true;
 			}
-			if (skillBoost) {
-				descriptions.emplace_back("Skill Boost", ss.str());
+
+			if (it.abilities->stats[STAT_MAGICPOINTS]) {
+				ss.str("");
+				ss << std::showpos << it.abilities->stats[STAT_MAGICPOINTS] << std::noshowpos;
+				descriptions.emplace_back("Magic Level", ss.str());
+			}
+
+			for (uint8_t i = 1; i <= 11; i++) {
+				if (it.abilities->specializedMagicLevel[i]) {
+					ss.str("");
+
+					ss << std::showpos << it.abilities->specializedMagicLevel[i] << std::noshowpos;
+					std::string combatName = getCombatName(indexToCombatType(i));
+					combatName[0] = toupper(combatName[0]);
+					descriptions.emplace_back(combatName + " Magic Level", ss.str());
+				}
+			}
+
+			if (it.abilities->magicShieldCapacityFlat || it.abilities->magicShieldCapacityPercent) {
+				ss.str("");
+				ss << std::showpos << it.abilities->magicShieldCapacityFlat << std::noshowpos << " and " << it.abilities->magicShieldCapacityPercent << "%";
+				descriptions.emplace_back("Magic Shield Capacity", ss.str());
+			}
+
+			if (it.abilities->perfectShotRange) {
+				ss.str("");
+				ss << std::showpos << it.abilities->perfectShotDamage << std::noshowpos << " at range " << unsigned(it.abilities->perfectShotRange);
+				descriptions.emplace_back("Perfect Shot", ss.str());
+			}
+
+			if (it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)]) {
+				ss.str("");
+				ss << it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)];
+				descriptions.emplace_back("Damage Reflection", ss.str());
+			}
+
+			if (it.abilities->speed) {
+				ss.str("");
+				ss << std::showpos << (it.abilities->speed >> 1) << std::noshowpos;
+				descriptions.emplace_back("Speed", ss.str());
+			}
+
+			if (it.abilities->cleavePercent) {
+				ss.str("");
+				ss << std::showpos << (it.abilities->cleavePercent) << std::noshowpos << "%";
+				descriptions.emplace_back("Cleave", ss.str());
+			}
+
+			if (it.abilities->conditionSuppressions[CONDITION_DRUNK] != 0) {
+				ss.str("");
+				ss << "Hard Drinking";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			if (it.abilities->invisible) {
+				ss.str("");
+				ss << "Invisibility";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			if (it.abilities->regeneration) {
+				ss.str("");
+				ss << "Faster Regeneration";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			if (it.abilities->manaShield) {
+				ss.str("");
+				ss << "Mana Shield";
+				descriptions.emplace_back("Effect", ss.str());
+			}
+
+			for (size_t i = 0; i < COMBAT_COUNT; ++i) {
+				if (it.abilities->absorbPercent[i] == 0) {
+					continue;
+				}
+
+				ss.str("");
+				ss << getCombatName(indexToCombatType(i)) << ' '
+				   << std::showpos << it.abilities->absorbPercent[i] << std::noshowpos << '%';
+				descriptions.emplace_back("Protection", ss.str());
 			}
 
 			for (size_t i = 0; i < COMBAT_COUNT; ++i) {
@@ -1510,7 +1670,7 @@ Item::getDescriptions(const ItemType &it, const Item* item /*= nullptr*/) {
 				descriptions.emplace_back("Field Protection", ss.str());
 			}
 
-			if (hasBitSet(CONDITION_DRUNK, it.abilities->conditionSuppressions)) {
+			if (it.abilities->conditionSuppressions[CONDITION_DRUNK] != 0) {
 				ss.str("");
 				ss << "Hard Drinking";
 				descriptions.emplace_back("Skill Boost", ss.str());
@@ -1885,6 +2045,52 @@ std::string Item::parseShowAttributesDescription(const Item* item, const uint16_
 				itemDescription << "magic level " << std::showpos << itemType.abilities->stats[STAT_MAGICPOINTS] << std::noshowpos;
 			}
 
+			for (uint8_t i = 1; i <= 11; i++) {
+				if (itemType.abilities->specializedMagicLevel[i]) {
+					if (begin) {
+						begin = false;
+						itemDescription << " (";
+					} else {
+						itemDescription << ", ";
+					}
+
+					itemDescription << getCombatName(indexToCombatType(i)) << " magic level " << std::showpos << itemType.abilities->specializedMagicLevel[i] << std::noshowpos;
+				}
+			}
+
+			if (itemType.abilities->magicShieldCapacityFlat || itemType.abilities->magicShieldCapacityPercent) {
+				if (begin) {
+					begin = false;
+					itemDescription << " (";
+				} else {
+					itemDescription << ", ";
+				}
+
+				itemDescription << "Magic Shield Capacity " << std::showpos << itemType.abilities->magicShieldCapacityFlat << std::noshowpos << " and " << itemType.abilities->magicShieldCapacityPercent << "%";
+			}
+
+			if (itemType.abilities->perfectShotRange) {
+				if (begin) {
+					begin = false;
+					itemDescription << " (";
+				} else {
+					itemDescription << ", ";
+				}
+
+				itemDescription << "Perfect Shot " << std::showpos << itemType.abilities->perfectShotDamage << std::noshowpos << " at range " << unsigned(itemType.abilities->perfectShotRange);
+			}
+
+			if (itemType.abilities->reflectFlat[0] != 0) {
+				if (begin) {
+					begin = false;
+					itemDescription << " (";
+				} else {
+					itemDescription << ", ";
+				}
+
+				itemDescription << "damage reflection " << std::showpos << itemType.abilities->reflectFlat[0] << std::noshowpos;
+			}
+
 			int16_t show = itemType.abilities->absorbPercent[0];
 			if (show != 0) {
 				for (size_t i = 1; i < COMBAT_COUNT; ++i) {
@@ -1978,6 +2184,17 @@ std::string Item::parseShowAttributesDescription(const Item* item, const uint16_
 			if (itemType.abilities->speed) {
 				itemDescription << parseShowDurationSpeed(itemType.abilities->speed, begin);
 			}
+
+			if (itemType.abilities->cleavePercent) {
+				if (begin) {
+					begin = false;
+					itemDescription << " (";
+				} else {
+					itemDescription << ", ";
+				}
+
+				itemDescription << "Cleave " << std::showpos << (itemType.abilities->cleavePercent) << std::noshowpos << "%";
+			}
 		}
 
 		if (!begin) {
@@ -1989,7 +2206,7 @@ std::string Item::parseShowAttributesDescription(const Item* item, const uint16_
 }
 
 std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const Item* item /*= nullptr*/, int32_t subType /*= -1*/, bool addArticle /*= true*/) {
-	const std::string* text = nullptr;
+	std::string text = "";
 
 	std::ostringstream s;
 	s << getNameDescription(it, item, subType, addArticle);
@@ -2129,6 +2346,52 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 					s << "magic level " << std::showpos << it.abilities->stats[STAT_MAGICPOINTS] << std::noshowpos;
 				}
 
+				for (uint8_t i = 1; i <= 11; i++) {
+					if (it.abilities->specializedMagicLevel[i]) {
+						if (begin) {
+							begin = false;
+							s << " (";
+						} else {
+							s << ", ";
+						}
+
+						s << getCombatName(indexToCombatType(i)) << " magic level " << std::showpos << it.abilities->specializedMagicLevel[i] << std::noshowpos;
+					}
+				}
+
+				if (it.abilities->magicShieldCapacityFlat || it.abilities->magicShieldCapacityPercent) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "magic shield capacity " << std::showpos << it.abilities->magicShieldCapacityFlat << std::noshowpos << " and " << it.abilities->magicShieldCapacityPercent << "%";
+				}
+
+				if (it.abilities->perfectShotRange) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "perfect shot " << std::showpos << it.abilities->perfectShotDamage << std::noshowpos << " at range " << unsigned(it.abilities->perfectShotRange);
+				}
+
+				if (it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)]) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "damage reflection " << std::showpos << it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)] << std::noshowpos;
+				}
+
 				int16_t show = it.abilities->absorbPercent[0];
 				if (show != 0) {
 					for (size_t i = 1; i < COMBAT_COUNT; ++i) {
@@ -2223,6 +2486,17 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 
 				if (it.abilities->speed) {
 					s << parseShowDurationSpeed(it.abilities->speed, begin);
+				}
+
+				if (it.abilities->cleavePercent) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "cleave " << std::showpos << (it.abilities->cleavePercent) << std::noshowpos << "%";
 				}
 			}
 
@@ -2320,6 +2594,52 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 					s << "magic level " << std::showpos << it.abilities->stats[STAT_MAGICPOINTS] << std::noshowpos;
 				}
 
+				for (uint8_t i = 1; i <= 11; i++) {
+					if (it.abilities->specializedMagicLevel[i]) {
+						if (begin) {
+							begin = false;
+							s << " (";
+						} else {
+							s << ", ";
+						}
+
+						s << getCombatName(indexToCombatType(i)) << " magic level " << std::showpos << it.abilities->specializedMagicLevel[i] << std::noshowpos;
+					}
+				}
+
+				if (it.abilities->magicShieldCapacityFlat || it.abilities->magicShieldCapacityPercent) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "magic shield capacity " << std::showpos << it.abilities->magicShieldCapacityFlat << std::noshowpos << " and " << it.abilities->magicShieldCapacityPercent << "%";
+				}
+
+				if (it.abilities->perfectShotRange) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "perfect shot " << std::showpos << it.abilities->perfectShotDamage << std::noshowpos << " at range " << unsigned(it.abilities->perfectShotRange);
+				}
+
+				if (it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)]) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "damage reflection " << std::showpos << it.abilities->reflectFlat[combatTypeToIndex(COMBAT_PHYSICALDAMAGE)] << std::noshowpos;
+				}
+
 				int16_t show = it.abilities->absorbPercent[0];
 				if (show != 0) {
 					for (size_t i = 1; i < COMBAT_COUNT; ++i) {
@@ -2415,6 +2735,17 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 				if (it.abilities->speed) {
 					s << parseShowDurationSpeed(it.abilities->speed, begin);
 				}
+
+				if (it.abilities->cleavePercent) {
+					if (begin) {
+						begin = false;
+						s << " (";
+					} else {
+						s << ", ";
+					}
+
+					s << "Cleave " << std::showpos << (it.abilities->cleavePercent) << std::noshowpos << "%";
+				}
 			}
 
 			if (!begin) {
@@ -2441,7 +2772,7 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 			if (it.abilities->speed > 0) {
 				bool begin = true;
 				s << parseShowDurationSpeed(it.abilities->speed, begin) << ")" << parseShowDuration(item);
-			} else if (hasBitSet(CONDITION_DRUNK, it.abilities->conditionSuppressions)) {
+			} else if (it.abilities->conditionSuppressions[CONDITION_DRUNK] != 0) {
 				s << " (hard drinking)";
 			} else if (it.abilities->invisible) {
 				s << " (invisibility)";
@@ -2479,9 +2810,8 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 
 				if (lookDistance <= 4) {
 					if (item) {
-						auto string = item->getAttribute<std::string>(ItemAttribute_t::TEXT);
-						text = &string;
-						if (!text->empty()) {
+						text = item->getAttribute<std::string>(ItemAttribute_t::TEXT);
+						if (!text.empty()) {
 							const std::string &writer = item->getAttribute<std::string>(ItemAttribute_t::WRITER);
 							if (!writer.empty()) {
 								s << writer << " wrote";
@@ -2493,7 +2823,7 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 							} else {
 								s << "You read: ";
 							}
-							s << *text;
+							s << text;
 						} else {
 							s << "Nothing is written on it";
 						}
@@ -2533,12 +2863,11 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 	if (!it.allowDistRead || (it.id >= 7369 && it.id <= 7371)) {
 		s << '.';
 	} else {
-		if (!text && item) {
-			auto string = item->getAttribute<std::string>(ItemAttribute_t::TEXT);
-			text = &string;
+		if (text.empty() && item) {
+			text = item->getAttribute<std::string>(ItemAttribute_t::TEXT);
 		}
 
-		if (!text || text->empty()) {
+		if (text.empty()) {
 			s << '.';
 		}
 	}
@@ -2606,14 +2935,13 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 	}
 
 	if (it.allowDistRead && it.id >= 7369 && it.id <= 7371) {
-		if (!text && item) {
-			auto string = item->getAttribute<std::string>(ItemAttribute_t::TEXT);
-			text = &string;
+		if (text.empty() && item) {
+			text = item->getAttribute<std::string>(ItemAttribute_t::TEXT);
 		}
 
-		if (text && !text->empty()) {
+		if (!text.empty()) {
 			s << std::endl
-			  << *text;
+			  << text;
 		}
 	}
 	return s.str();
@@ -2768,7 +3096,7 @@ void Item::stopDecaying() {
 Item* Item::transform(uint16_t itemId, uint16_t itemCount /*= -1*/) {
 	Cylinder* cylinder = getParent();
 	if (cylinder == nullptr) {
-		SPDLOG_INFO("[{}] failed to transform item {}, cylinder is nullptr", __FUNCTION__, getID());
+		g_logger().info("[{}] failed to transform item {}, cylinder is nullptr", __FUNCTION__, getID());
 		return nullptr;
 	}
 

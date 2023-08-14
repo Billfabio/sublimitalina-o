@@ -139,7 +139,7 @@ bool Condition::unserializeProp(ConditionAttr_t attr, PropStream &propStream) {
 
 void Condition::serialize(PropWriteStream &propWriteStream) {
 	propWriteStream.write<uint8_t>(CONDITIONATTR_TYPE);
-	propWriteStream.write<uint32_t>(conditionType);
+	propWriteStream.write<int8_t>(conditionType);
 
 	propWriteStream.write<uint8_t>(CONDITIONATTR_ID);
 	propWriteStream.write<uint32_t>(id);
@@ -252,8 +252,8 @@ Condition* Condition::createCondition(PropStream &propStream) {
 		return nullptr;
 	}
 
-	uint32_t type;
-	if (!propStream.read<uint32_t>(type)) {
+	int8_t type;
+	if (!propStream.read<int8_t>(type)) {
 		return nullptr;
 	}
 
@@ -419,8 +419,21 @@ void ConditionAttributes::addCondition(Creature* creature, const Condition* addC
 		memcpy(statsPercent, conditionAttrs.statsPercent, sizeof(statsPercent));
 		memcpy(buffs, conditionAttrs.buffs, sizeof(buffs));
 		memcpy(buffsPercent, conditionAttrs.buffsPercent, sizeof(buffsPercent));
+
+		// Using std::array can only increment to the new instead of use memcpy
+		absorbs = conditionAttrs.absorbs;
+		absorbsPercent = conditionAttrs.absorbsPercent;
+		increases = conditionAttrs.increases;
+		increasesPercent = conditionAttrs.increasesPercent;
+		charmChanceModifier = conditionAttrs.charmChanceModifier;
+
 		updatePercentBuffs(creature);
 		updateBuffs(creature);
+		updatePercentAbsorbs(creature);
+		updateAbsorbs(creature);
+		updatePercentIncreases(creature);
+		updateIncreases(creature);
+		updateCharmChanceModifier(creature);
 		disableDefense = conditionAttrs.disableDefense;
 
 		if (Player* player = creature->getPlayer()) {
@@ -442,6 +455,32 @@ bool ConditionAttributes::unserializeProp(ConditionAttr_t attr, PropStream &prop
 		return propStream.read<int32_t>(stats[currentStat++]);
 	} else if (attr == CONDITIONATTR_BUFFS) {
 		return propStream.read<int32_t>(buffs[currentBuff++]);
+	} else if (attr == CONDITIONATTR_ABSORBS) {
+		for (int32_t i = 0; i < CombatType_t::COMBAT_COUNT; ++i) {
+			uint8_t index;
+			int32_t value;
+			if (!propStream.read<uint8_t>(index) || !propStream.read<int32_t>(value)) {
+				return false;
+			}
+
+			setAbsorb(index, value);
+		}
+
+		return true;
+	} else if (attr == CONDITIONATTR_INCREASES) {
+		for (int32_t i = 0; i < CombatType_t::COMBAT_COUNT; ++i) {
+			uint8_t index;
+			int32_t value;
+			if (!propStream.read<uint8_t>(index) || !propStream.read<int32_t>(value)) {
+				return false;
+			}
+
+			setIncrease(index, value);
+		}
+
+		return true;
+	} else if (attr == CONDITIONATTR_CHARM_CHANCE_MODIFIER) {
+		return propStream.read<int8_t>(charmChanceModifier);
 	}
 	return Condition::unserializeProp(attr, propStream);
 }
@@ -463,6 +502,28 @@ void ConditionAttributes::serialize(PropWriteStream &propWriteStream) {
 		propWriteStream.write<uint8_t>(CONDITIONATTR_BUFFS);
 		propWriteStream.write<int32_t>(buffs[i]);
 	}
+
+	// Save attribute absorbs
+	propWriteStream.write<uint8_t>(CONDITIONATTR_ABSORBS);
+	for (int32_t i = 0; i < CombatType_t::COMBAT_COUNT; ++i) {
+		// Save index
+		propWriteStream.write<uint8_t>(i);
+		// Save percent
+		propWriteStream.write<int32_t>(getAbsorbByIndex(i));
+	}
+
+	// Save attribute increases
+	propWriteStream.write<uint8_t>(CONDITIONATTR_INCREASES);
+	for (int32_t i = 0; i < CombatType_t::COMBAT_COUNT; ++i) {
+		// Save index
+		propWriteStream.write<uint8_t>(i);
+		// Save percent
+		propWriteStream.write<int32_t>(getIncreaseByIndex(i));
+	}
+
+	// Save charm percent
+	propWriteStream.write<uint8_t>(CONDITIONATTR_CHARM_CHANCE_MODIFIER);
+	propWriteStream.write<int8_t>(charmChanceModifier);
 }
 
 bool ConditionAttributes::startCondition(Creature* creature) {
@@ -473,6 +534,12 @@ bool ConditionAttributes::startCondition(Creature* creature) {
 	creature->setUseDefense(!disableDefense);
 	updatePercentBuffs(creature);
 	updateBuffs(creature);
+	// 12.72 mechanics
+	updatePercentAbsorbs(creature);
+	updateAbsorbs(creature);
+	updatePercentIncreases(creature);
+	updateIncreases(creature);
+	updateCharmChanceModifier(creature);
 	if (Player* player = creature->getPlayer()) {
 		updatePercentSkills(player);
 		updateSkills(player);
@@ -552,6 +619,51 @@ void ConditionAttributes::updateSkills(Player* player) {
 	}
 }
 
+void ConditionAttributes::updatePercentAbsorbs(const Creature* creature) {
+	for (uint8_t i = 0; i < COMBAT_COUNT; i++) {
+		auto value = getAbsorbPercentByIndex(i);
+		if (value == 0) {
+			continue;
+		}
+		setAbsorb(i, std::round((100 - creature->getAbsorbPercent(indexToCombatType(i))) * value / 100.f));
+	}
+}
+
+void ConditionAttributes::updateAbsorbs(Creature* creature) const {
+	for (uint8_t i = 0; i < COMBAT_COUNT; i++) {
+		auto value = getAbsorbByIndex(i);
+		if (value == 0) {
+			continue;
+		}
+
+		creature->setAbsorbPercent(indexToCombatType(i), value);
+	}
+}
+
+void ConditionAttributes::updatePercentIncreases(const Creature* creature) {
+	for (uint8_t i = 0; i < COMBAT_COUNT; i++) {
+		auto increasePercentValue = getIncreasePercentById(i);
+		if (increasePercentValue == 0) {
+			continue;
+		}
+		setIncrease(i, std::round((100 - creature->getIncreasePercent(indexToCombatType(i))) * increasePercentValue / 100.f));
+	}
+}
+
+void ConditionAttributes::updateIncreases(Creature* creature) const {
+	for (uint8_t i = 0; i < COMBAT_COUNT; i++) {
+		auto increaseValue = getIncreaseByIndex(i);
+		if (increaseValue == 0) {
+			continue;
+		}
+		creature->setIncreasePercent(indexToCombatType(i), increaseValue);
+	}
+}
+
+void ConditionAttributes::updateCharmChanceModifier(Creature* creature) const {
+	creature->setCharmChanceModifier(creature->getCharmChanceModifier() + charmChanceModifier);
+}
+
 void ConditionAttributes::updatePercentBuffs(Creature* creature) {
 	for (int32_t i = BUFF_FIRST; i <= BUFF_LAST; ++i) {
 		if (buffsPercent[i] == 0) {
@@ -599,6 +711,8 @@ void ConditionAttributes::endCondition(Creature* creature) {
 			}
 		}
 
+		player->setCharmChanceModifier(player->getCharmChanceModifier() - charmChanceModifier);
+
 		if (needUpdate) {
 			player->sendStats();
 			player->sendSkills();
@@ -611,6 +725,17 @@ void ConditionAttributes::endCondition(Creature* creature) {
 			creature->setBuff(static_cast<buffs_t>(i), -buffs[i]);
 		}
 	}
+	for (uint8_t i = 0; i < COMBAT_COUNT; i++) {
+		auto value = getAbsorbByIndex(i);
+		if (value) {
+			creature->setAbsorbPercent(indexToCombatType(i), -value);
+		}
+		auto increaseValue = getIncreaseByIndex(i);
+		if (increaseValue > 0) {
+			creature->setIncreasePercent(indexToCombatType(i), -increaseValue);
+		}
+	}
+
 	if (creature->getMonster() && needUpdateIcons) {
 		g_game().updateCreatureIcon(creature);
 	}
@@ -788,8 +913,181 @@ bool ConditionAttributes::setParam(ConditionParam_t param, int32_t value) {
 			return true;
 		}
 
+		case CONDITION_PARAM_ABSORB_PHYSICALPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_PHYSICALDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_FIREPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_FIREDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_ENERGYPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_ENERGYDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_ICEPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_ICEDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_EARTHPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_EARTHDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_DEATHPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_DEATHDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_HOLYPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_HOLYDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_LIFEDRAINPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_LIFEDRAIN), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_MANADRAINPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_MANADRAIN), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_ABSORB_DROWNPERCENT: {
+			setAbsorbPercent(combatTypeToIndex(COMBAT_DROWNDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_PHYSICALPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_PHYSICALDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_FIREPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_FIREDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_ENERGYPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_ENERGYDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_ICEPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_ICEDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_EARTHPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_EARTHDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_DEATHPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_DEATHDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_HOLYPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_HOLYDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_LIFEDRAINPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_LIFEDRAIN), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_MANADRAINPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_MANADRAIN), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_INCREASE_DROWNPERCENT: {
+			setIncreasePercent(combatTypeToIndex(COMBAT_DROWNDAMAGE), value);
+			return true;
+		}
+
+		case CONDITION_PARAM_CHARM_CHANCE_MODIFIER: {
+			charmChanceModifier = static_cast<int8_t>(value);
+			return true;
+		}
+
 		default:
 			return ret;
+	}
+}
+
+int32_t ConditionAttributes::getAbsorbByIndex(uint8_t index) const {
+	try {
+		return absorbs.at(index);
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in getAbsorbsValue: {}", index, e.what());
+	}
+	return 0;
+}
+
+void ConditionAttributes::setAbsorb(uint8_t index, int32_t value) {
+	try {
+		absorbs.at(index) = value;
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in setAbsorb: {}", index, e.what());
+	}
+}
+
+int32_t ConditionAttributes::getAbsorbPercentByIndex(uint8_t index) const {
+	try {
+		return absorbsPercent.at(index);
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in getAbsorbPercentByIndex: {}", index, e.what());
+	}
+	return 0;
+}
+
+void ConditionAttributes::setAbsorbPercent(uint8_t index, int32_t value) {
+	try {
+		absorbsPercent.at(index) = value;
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in setAbsorbPercent: {}", index, e.what());
+	}
+}
+
+int32_t ConditionAttributes::getIncreaseByIndex(uint8_t index) const {
+	try {
+		return increases.at(index);
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in getIncreaseByIndex: {}", index, e.what());
+	}
+	return 0;
+}
+
+void ConditionAttributes::setIncrease(uint8_t index, int32_t value) {
+	try {
+		increases.at(index) = value;
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in setIncrease: {}", index, e.what());
+	}
+}
+
+int32_t ConditionAttributes::getIncreasePercentById(uint8_t index) const {
+	try {
+		return increasesPercent.at(index);
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in getIncreasePercentById: {}", index, e.what());
+	}
+	return 0;
+}
+
+void ConditionAttributes::setIncreasePercent(uint8_t index, int32_t value) {
+	try {
+		increasesPercent.at(index) = value;
+	} catch (const std::out_of_range &e) {
+		g_logger().error("Index {} is out of range in setIncreasePercent: {}", index, e.what());
 	}
 }
 
@@ -1358,7 +1656,7 @@ bool ConditionDamage::doDamage(Creature* creature, int32_t healthChange) {
 		damage.primary.value = static_cast<int32_t>(std::round(damage.primary.value / 2.));
 	}
 
-	if (!creature->isAttackable() || Combat::canDoCombat(attacker, creature) != RETURNVALUE_NOERROR) {
+	if (!creature->isAttackable() || Combat::canDoCombat(attacker, creature, damage.primary.type != COMBAT_HEALING) != RETURNVALUE_NOERROR) {
 		if (!creature->isInGhostMode() && !creature->getNpc()) {
 			g_game().addMagicEffect(creature->getPosition(), CONST_ME_POFF);
 		}
@@ -1538,7 +1836,7 @@ bool ConditionFeared::getRandomDirection(Creature* creature, Position pos) {
 bool ConditionFeared::canWalkTo(const Creature* creature, Position pos, Direction moveDirection) const {
 	pos = getNextPosition(moveDirection, pos);
 	if (!creature) {
-		spdlog::error("[{}] creature is nullptr", __FUNCTION__);
+		g_logger().error("[{}] creature is nullptr", __FUNCTION__);
 		return false;
 	}
 
@@ -1566,14 +1864,14 @@ bool ConditionFeared::getFleeDirection(Creature* creature) {
 		 *	Monster is on the same SQM of the player
 		 *	Flee to Anywhere
 		 */
-		SPDLOG_DEBUG("[ConditionsFeared::getFleeDirection] Monster is on top of player, flee randomly. {} {}", offx, offy);
+		g_logger().debug("[ConditionsFeared::getFleeDirection] Monster is on top of player, flee randomly. {} {}", offx, offy);
 		return getRandomDirection(creature, creaturePos);
 	} else if (offx >= 1 && offy <= 0) {
 		/*
 		 *	Monster is on SW Region
 		 *	Flee to N(0), NE(1) and E(2)
 		 */
-		SPDLOG_DEBUG("[ConditionsFeared::getFleeDirection] Monster is on the SW region, flee to N, NE or E. {} {}", offx, offy);
+		g_logger().debug("[ConditionsFeared::getFleeDirection] Monster is on the SW region, flee to N, NE or E. {} {}", offx, offy);
 
 		if (offy == 0) {
 			this->fleeIndx = 2; // Starts at East
@@ -1587,7 +1885,7 @@ bool ConditionFeared::getFleeDirection(Creature* creature) {
 		 *	Monster is on NW Region
 		 *	Flee to E(2), SE(3) and S(4)
 		 */
-		SPDLOG_DEBUG("[ConditionsFeared::getFleeDirection] Monster is on the NW region, flee to E, SE or S. {} {}", offx, offy);
+		g_logger().debug("[ConditionsFeared::getFleeDirection] Monster is on the NW region, flee to E, SE or S. {} {}", offx, offy);
 
 		if (offx == 0) {
 			this->fleeIndx = 4; // Starts at South
@@ -1601,7 +1899,7 @@ bool ConditionFeared::getFleeDirection(Creature* creature) {
 		 *	Monster is on NE Region
 		 *	Flee to S(4), SW(5) and W(6)
 		 */
-		SPDLOG_DEBUG("[ConditionsFeared::getFleeDirection] Monster is on the NE region, flee to S, SW or W. {} {}", offx, offy);
+		g_logger().debug("[ConditionsFeared::getFleeDirection] Monster is on the NE region, flee to S, SW or W. {} {}", offx, offy);
 
 		if (offy == 0) {
 			this->fleeIndx = 6; // Starts at West
@@ -1615,7 +1913,7 @@ bool ConditionFeared::getFleeDirection(Creature* creature) {
 		 *	Monster is on SE
 		 *	Flee to W(6), NW(7) and N(0)
 		 */
-		SPDLOG_DEBUG("[ConditionsFeared::getFleeDirection] Monster is on the SE region, flee to W, NW or N. {} {}", offx, offy);
+		g_logger().debug("[ConditionsFeared::getFleeDirection] Monster is on the SE region, flee to W, NW or N. {} {}", offx, offy);
 
 		if (offx == 0) {
 			this->fleeIndx = 0; // Starts at North
@@ -1626,7 +1924,7 @@ bool ConditionFeared::getFleeDirection(Creature* creature) {
 		return true;
 	}
 
-	SPDLOG_DEBUG("[ConditionsFeared::getFleeDirection] Something went wrong. {} {}", offx, offy);
+	g_logger().debug("[ConditionsFeared::getFleeDirection] Something went wrong. {} {}", offx, offy);
 	return false;
 }
 
@@ -1638,14 +1936,14 @@ bool ConditionFeared::getFleePath(Creature* creature, const Position &pos, std::
 
 	do {
 		for (uint8_t wsize : walkSize) {
-			SPDLOG_DEBUG("[{}] Checking on index {} with walkSize of {}", __FUNCTION__, fleeIndx, wsize);
+			g_logger().debug("[{}] Checking on index {} with walkSize of {}", __FUNCTION__, fleeIndx, wsize);
 
 			if (fleeIndx == 8) { // Reset index if at the end of the loop
 				fleeIndx = 0;
 			}
 
 			if (isStuck(creature, pos)) { // Check if it is possible to walk to any direction
-				SPDLOG_DEBUG("[{}] Can't walk to anywhere", __FUNCTION__);
+				g_logger().debug("[{}] Can't walk to anywhere", __FUNCTION__);
 				return false;
 			}
 
@@ -1654,46 +1952,46 @@ bool ConditionFeared::getFleePath(Creature* creature, const Position &pos, std::
 			switch (m_directionsVector[fleeIndx]) {
 				case DIRECTION_NORTH:
 					futurePos.y += wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to NORTH to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to NORTH to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 
 				case DIRECTION_NORTHEAST:
 					futurePos.x += wsize;
 					futurePos.y -= wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to NORTHEAST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to NORTHEAST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 
 				case DIRECTION_EAST:
 					futurePos.x -= wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to EAST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to EAST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 
 				case DIRECTION_SOUTHEAST:
 					futurePos.x -= wsize;
 					futurePos.y += wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to SOUTHEAST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to SOUTHEAST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 
 				case DIRECTION_SOUTH:
 					futurePos.y += wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to SOUTH to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to SOUTH to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 
 				case DIRECTION_SOUTHWEST:
 					futurePos.x += wsize;
 					futurePos.y += wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to SOUTHWEST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to SOUTHWEST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 
 				case DIRECTION_WEST:
 					futurePos.x += wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to WEST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to WEST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 
 				case DIRECTION_NORTHWEST:
 					futurePos.x += wsize;
 					futurePos.y -= wsize;
-					SPDLOG_DEBUG("[{}] Trying to flee to NORTHWEST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
+					g_logger().debug("[{}] Trying to flee to NORTHWEST to {} [{}]", __FUNCTION__, futurePos.toString(), wsize);
 					break;
 			}
 
@@ -1710,7 +2008,7 @@ bool ConditionFeared::getFleePath(Creature* creature, const Position &pos, std::
 		}
 	} while (!found && found_size == 0);
 
-	SPDLOG_DEBUG("[{}] Found Available path to {} with {} steps", __FUNCTION__, futurePos.toString(), found_size);
+	g_logger().debug("[{}] Found Available path to {} with {} steps", __FUNCTION__, futurePos.toString(), found_size);
 	return true;
 }
 
@@ -1723,9 +2021,9 @@ bool ConditionFeared::setPositionParam(ConditionParam_t param, const Position &p
 }
 
 bool ConditionFeared::startCondition(Creature* creature) {
-	SPDLOG_DEBUG("[ConditionFeared::executeCondition] Condition started for {}", creature->getName());
+	g_logger().debug("[ConditionFeared::executeCondition] Condition started for {}", creature->getName());
 	getFleeDirection(creature);
-	SPDLOG_DEBUG("[ConditionFeared::executeCondition] Flee from {}", fleeingFromPos.toString());
+	g_logger().debug("[ConditionFeared::executeCondition] Flee from {}", fleeingFromPos.toString());
 	return Condition::startCondition(creature);
 }
 
@@ -1733,7 +2031,7 @@ bool ConditionFeared::executeCondition(Creature* creature, int32_t interval) {
 	Position currentPos = creature->getPosition();
 	std::forward_list<Direction> listDir;
 
-	SPDLOG_DEBUG("[ConditionFeared::executeCondition] Executing condition, current position is {}", currentPos.toString());
+	g_logger().debug("[ConditionFeared::executeCondition] Executing condition, current position is {}", currentPos.toString());
 
 	if (creature->getWalkSize() < 2) {
 		if (fleeIndx == 99) {
@@ -1742,7 +2040,7 @@ bool ConditionFeared::executeCondition(Creature* creature, int32_t interval) {
 
 		if (getFleePath(creature, currentPos, listDir)) {
 			g_dispatcher().addTask(createTask(std::bind(&Game::forcePlayerAutoWalk, &g_game(), creature->getID(), listDir)), true);
-			SPDLOG_DEBUG("[ConditionFeared::executeCondition] Walking Scheduled");
+			g_logger().debug("[ConditionFeared::executeCondition] Walking Scheduled");
 		}
 	}
 
@@ -1959,7 +2257,7 @@ void ConditionOutfit::serialize(PropWriteStream &propWriteStream) {
 
 bool ConditionOutfit::startCondition(Creature* creature) {
 	if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS) && outfit.lookType != 0 && !g_game().isLookTypeRegistered(outfit.lookType)) {
-		SPDLOG_WARN("[ConditionOutfit::startCondition] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
+		g_logger().warn("[ConditionOutfit::startCondition] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
 		return false;
 	}
 
@@ -1968,7 +2266,7 @@ bool ConditionOutfit::startCondition(Creature* creature) {
 		if (monsterType) {
 			setOutfit(monsterType->info.outfit);
 		} else {
-			SPDLOG_ERROR("[ConditionOutfit::startCondition] Monster {} does not exist", monsterName);
+			g_logger().error("[ConditionOutfit::startCondition] Monster {} does not exist", monsterName);
 			return false;
 		}
 	}
@@ -1991,7 +2289,7 @@ void ConditionOutfit::endCondition(Creature* creature) {
 
 void ConditionOutfit::addCondition(Creature* creature, const Condition* addCondition) {
 	if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS) && outfit.lookType != 0 && !g_game().isLookTypeRegistered(outfit.lookType)) {
-		SPDLOG_WARN("[ConditionOutfit::addCondition] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
+		g_logger().warn("[ConditionOutfit::addCondition] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
 		return;
 	}
 
@@ -2004,7 +2302,7 @@ void ConditionOutfit::addCondition(Creature* creature, const Condition* addCondi
 			if (monsterType) {
 				setOutfit(monsterType->info.outfit);
 			} else {
-				SPDLOG_ERROR("[ConditionOutfit::addCondition] - Monster {} does not exist", monsterName);
+				g_logger().error("[ConditionOutfit::addCondition] - Monster {} does not exist", monsterName);
 				return;
 			}
 		} else if (conditionOutfit.outfit.lookType != 0 || conditionOutfit.outfit.lookTypeEx != 0) {

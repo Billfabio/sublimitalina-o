@@ -17,8 +17,8 @@
 
 struct Abilities {
 	public:
-		uint32_t conditionImmunities = 0;
-		uint32_t conditionSuppressions = 0;
+		std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> conditionImmunities = {};
+		std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> conditionSuppressions = {};
 
 		// stats modifiers
 		int32_t stats[STAT_LAST + 1] = { 0 };
@@ -41,6 +41,22 @@ struct Abilities {
 		// elemental damage
 		uint16_t elementDamage = 0;
 		CombatType_t elementType = COMBAT_NONE;
+
+		// 12.72 modifiers
+		// Specialized magic level modifiers
+		int32_t reflectFlat[COMBAT_COUNT] = { 0 };
+		int32_t specializedMagicLevel[COMBAT_COUNT] = { 0 };
+
+		// magic shield capacity
+		int32_t magicShieldCapacityPercent = 0;
+		int32_t magicShieldCapacityFlat = 0;
+
+		// cleave
+		int32_t cleavePercent = 0;
+
+		// perfect shot
+		int32_t perfectShotDamage = 0;
+		uint8_t perfectShotRange = 0;
 
 		bool manaShield = false;
 		bool invisible = false;
@@ -156,6 +172,12 @@ class ItemType {
 		bool isQuiver() const {
 			return (type == ITEM_TYPE_QUIVER);
 		}
+		bool isLadder() const {
+			return (type == ITEM_TYPE_LADDER);
+		}
+		bool isDummy() const {
+			return (type == ITEM_TYPE_DUMMY);
+		}
 		bool hasSubType() const {
 			return (isFluidContainer() || isSplash() || stackable || charges != 0);
 		}
@@ -252,17 +274,19 @@ class ItemType {
 		uint16_t slotPosition = SLOTP_HAND;
 		uint16_t speed = 0;
 		uint16_t wareId = 0;
-		uint8_t stackSize = 100;
+		uint16_t bedPartOf = 0;
+		uint16_t m_transformOnUse = 0;
 
 		MagicEffectClasses magicEffect = CONST_ME_NONE;
 		Direction bedPartnerDir = DIRECTION_NONE;
+		BedItemPart_t bedPart = BED_NONE_PART;
 		WeaponType_t weaponType = WEAPON_NONE;
 		Ammo_t ammoType = AMMO_NONE;
 		ShootType_t shootType = CONST_ANI_NONE;
 		RaceType_t corpseType = RACE_NONE;
 		Fluids_t fluidSource = FLUID_NONE;
 		TileFlags_t floorChange = TILESTATE_NONE;
-		std::map<ImbuementTypes_t, uint16_t> imbuementTypes;
+		phmap::btree_map<ImbuementTypes_t, uint16_t> imbuementTypes;
 
 		uint8_t upgradeClassification = 0;
 		uint8_t alwaysOnTopOrder = 0;
@@ -270,6 +294,8 @@ class ItemType {
 		uint8_t lightColor = 0;
 		uint8_t shootRange = 1;
 		uint8_t imbuementSlot = 0;
+		uint8_t stackSize = 100;
+
 		int8_t hitChance = 0;
 
 		// 12.90
@@ -360,8 +386,24 @@ class Items {
 
 		NameMap nameToItems;
 
+		void addLadderId(uint16_t newId) {
+			ladders.push_back(newId);
+		}
+		void addDummyId(uint16_t newId, uint16_t rate) {
+			dummys[newId] = rate;
+		}
+
+		const std::vector<uint16_t> &getLadders() const {
+			return ladders;
+		}
+		const std::unordered_map<uint16_t, uint16_t> &getDummys() const {
+			return dummys;
+		}
+
 	private:
 		std::vector<ItemType> items;
+		std::vector<uint16_t> ladders;
+		std::unordered_map<uint16_t, uint16_t> dummys;
 		InventoryVector inventory;
 };
 

@@ -33,6 +33,7 @@
 #include "map/town.h"
 #include "vocations/vocation.h"
 #include "creatures/npcs/npc.h"
+#include "game/bank/bank.hpp"
 
 class House;
 class NetworkMessage;
@@ -85,13 +86,13 @@ struct OpenContainer {
 		uint16_t index;
 };
 
-using MuteCountMap = std::map<uint32_t, uint32_t>;
+using MuteCountMap = phmap::btree_map<uint32_t, uint32_t>;
 
 static constexpr int32_t PLAYER_MAX_SPEED = 65535;
 static constexpr int32_t PLAYER_MIN_SPEED = 10;
 static constexpr int32_t PLAYER_SOUND_HEALTH_CHANGE = 10;
 
-class Player final : public Creature, public Cylinder {
+class Player final : public Creature, public Cylinder, public Bankable {
 	public:
 		explicit Player(ProtocolGame_ptr p);
 		~Player();
@@ -108,6 +109,13 @@ class Player final : public Creature, public Cylinder {
 		}
 
 		void setID() override;
+
+		void setOnline(bool value) override {
+			online = value;
+		}
+		bool isOnline() const override {
+			return online;
+		}
 
 		static uint32_t getFirstID();
 		static uint32_t getLastID();
@@ -232,10 +240,10 @@ class Player final : public Creature, public Cylinder {
 			offlineTrainingSkill = skill;
 		}
 
-		uint64_t getBankBalance() const {
+		uint64_t getBankBalance() const override {
 			return bankBalance;
 		}
-		void setBankBalance(uint64_t balance) {
+		void setBankBalance(uint64_t balance) override {
 			bankBalance = balance;
 		}
 
@@ -337,6 +345,47 @@ class Player final : public Creature, public Cylinder {
 		Party* getParty() const {
 			return party;
 		}
+
+		int32_t getCleavePercent(bool useCharges = false) const;
+
+		void setCleavePercent(int32_t value) {
+			cleavePercent = std::max(0, cleavePercent + value);
+		}
+
+		int32_t getPerfectShotDamage(uint8_t range, bool useCharges = false) const;
+
+		void setPerfectShotDamage(uint8_t range, int32_t damage) {
+			int32_t actualDamage = getPerfectShotDamage(range);
+			bool aboveZero = (actualDamage != 0);
+			actualDamage += damage;
+			if (actualDamage == 0 && aboveZero)
+				perfectShot.erase(range);
+			else
+				perfectShot[range] = actualDamage;
+		}
+
+		int32_t getSpecializedMagicLevel(CombatType_t combat, bool useCharges = false) const;
+
+		void setSpecializedMagicLevel(CombatType_t combat, int32_t value) {
+			specializedMagicLevel[combatTypeToIndex(combat)] = std::max(0, specializedMagicLevel[combatTypeToIndex(combat)] + value);
+		}
+
+		int32_t getMagicShieldCapacityFlat(bool useCharges = false) const;
+
+		void setMagicShieldCapacityFlat(int32_t value) {
+			magicShieldCapacityFlat += value;
+		}
+
+		int32_t getMagicShieldCapacityPercent(bool useCharges = false) const;
+
+		void setMagicShieldCapacityPercent(int32_t value) {
+			magicShieldCapacityPercent += value;
+		}
+
+		int32_t getReflectPercent(CombatType_t combat, bool useCharges = false) const override;
+
+		int32_t getReflectFlat(CombatType_t combat, bool useCharges = false) const override;
+
 		PartyShields_t getPartyShield(const Player* player) const;
 		bool isInviting(const Player* player) const;
 		bool isPartner(const Player* player) const;
@@ -421,6 +470,10 @@ class Player final : public Creature, public Cylinder {
 
 		void addStorageValue(const uint32_t key, const int32_t value, const bool isLogin = false);
 		int32_t getStorageValue(const uint32_t key) const;
+
+		int32_t getStorageValueByName(const std::string &storageName) const;
+		void addStorageValueByName(const std::string &storageName, const int32_t value, const bool isLogin = false);
+
 		void genReservedStorageRange();
 
 		void setGroup(Group* newGroup) {
@@ -522,8 +575,21 @@ class Player final : public Creature, public Cylinder {
 		bool isAccessPlayer() const {
 			return group->access;
 		}
+		bool isPlayerGroup() const {
+			return group->id <= account::GROUP_TYPE_SENIORTUTOR;
+		}
 		bool isPremium() const;
 		void setPremiumDays(int32_t v);
+
+		int32_t getVipDays() const {
+			return premiumDays;
+		}
+		bool isVip() const {
+			if (!g_configManager().getBoolean(VIP_SYSTEM_ENABLED)) {
+				return false;
+			}
+			return getVipDays() > 0;
+		}
 
 		void setTibiaCoins(int32_t v);
 		void setTransferableTibiaCoins(int32_t v);
@@ -657,17 +723,15 @@ class Player final : public Creature, public Cylinder {
 		void setVarStats(stats_t stat, int32_t modifier);
 		int32_t getDefaultStats(stats_t stat) const;
 
-		void addConditionSuppressions(uint32_t conditions);
-		void removeConditionSuppressions(uint32_t conditions);
+		void addConditionSuppressions(const std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> &addCondition);
+		void removeConditionSuppressions();
 
 		Reward* getReward(const uint64_t rewardId, const bool autoCreate);
 		void removeReward(uint64_t rewardId);
 		void getRewardList(std::vector<uint64_t> &rewards) const;
 		RewardChest* getRewardChest();
 
-		ReturnValue recurseMoveItemToContainer(Item* item, Container* container);
 		std::vector<Item*> getRewardsFromContainer(const Container* container) const;
-		ReturnValue rewardChestCollect(const Container* fromCorpse = nullptr, uint32_t maxMoveItems = 0);
 
 		DepotChest* getDepotChest(uint32_t depotId, bool autoCreate);
 		DepotLocker* getDepotLocker(uint32_t depotId);
@@ -1222,7 +1286,7 @@ class Player final : public Creature, public Cylinder {
 				client->sendPlayerVocation(player);
 			}
 		}
-		void sendDistanceShoot(const Position &from, const Position &to, uint8_t type) const {
+		void sendDistanceShoot(const Position &from, const Position &to, uint16_t type) const {
 			if (client) {
 				client->sendDistanceShoot(from, to, type);
 			}
@@ -1249,12 +1313,12 @@ class Player final : public Creature, public Cylinder {
 				client->sendGameNews();
 			}
 		}
-		void sendMagicEffect(const Position &pos, uint8_t type) const {
+		void sendMagicEffect(const Position &pos, uint16_t type) const {
 			if (client) {
 				client->sendMagicEffect(pos, type);
 			}
 		}
-		void removeMagicEffect(const Position &pos, uint8_t type) const {
+		void removeMagicEffect(const Position &pos, uint16_t type) const {
 			if (client) {
 				client->removeMagicEffect(pos, type);
 			}
@@ -1311,7 +1375,7 @@ class Player final : public Creature, public Cylinder {
 				client->sendShop(npc);
 			}
 		}
-		void sendSaleItemList(const std::map<uint16_t, uint16_t> &inventoryMap) const {
+		void sendSaleItemList(const phmap::btree_map<uint16_t, uint16_t> &inventoryMap) const {
 			if (client && shopOwner) {
 				client->sendSaleItemList(shopOwner->getShopItemVector(), inventoryMap);
 			}
@@ -1636,7 +1700,7 @@ class Player final : public Creature, public Cylinder {
 			lastWalking = OTSYS_TIME() + value;
 		}
 
-		const std::map<uint8_t, OpenContainer> &getOpenContainers() const {
+		const phmap::btree_map<uint8_t, OpenContainer> &getOpenContainers() const {
 			return openContainers;
 		}
 
@@ -1949,6 +2013,7 @@ class Player final : public Creature, public Cylinder {
 
 		// Prey system
 		void initializePrey();
+		void removePreySlotById(PreySlot_t slotid);
 
 		void sendPreyData() const {
 			if (client) {
@@ -2176,7 +2241,7 @@ class Player final : public Creature, public Cylinder {
 		void openContainerFromDepotSearch(const Position &pos);
 		Item* getItemFromDepotSearch(uint16_t itemId, const Position &pos);
 
-		std::pair<std::vector<Item*>, std::map<uint16_t, std::map<uint8_t, uint32_t>>> requestLockerItems(DepotLocker* depotLocker, bool sendToClient = false, uint8_t tier = 0) const;
+		std::pair<std::vector<Item*>, phmap::btree_map<uint16_t, phmap::btree_map<uint8_t, uint32_t>>> requestLockerItems(DepotLocker* depotLocker, bool sendToClient = false, uint8_t tier = 0) const;
 
 		/**
 		This function returns a pair of an array of items and a 16-bit integer from a DepotLocker instance, a 8-bit byte and a 16-bit integer.
@@ -2285,8 +2350,6 @@ class Player final : public Creature, public Cylinder {
 
 		void registerForgeHistoryDescription(ForgeHistory history);
 
-		std::map<uint16_t, Item*> getEquippedItemsWithEnabledAbilitiesBySlot() const;
-
 		void setBossPoints(uint32_t amount) {
 			bossPoints = amount;
 		}
@@ -2331,9 +2394,9 @@ class Player final : public Creature, public Cylinder {
 			return bossRemoveTimes;
 		}
 
-		void sendBossPodiumWindow(const Item* podium, const Position &position, uint16_t itemId, uint8_t stackpos) const {
+		void sendMonsterPodiumWindow(const Item* podium, const Position &position, uint16_t itemId, uint8_t stackpos) const {
 			if (client) {
-				client->sendBossPodiumWindow(podium, position, itemId, stackpos);
+				client->sendMonsterPodiumWindow(podium, position, itemId, stackpos);
 			}
 		}
 
@@ -2343,7 +2406,7 @@ class Player final : public Creature, public Cylinder {
 			}
 		}
 
-		void sendInventoryImbuements(const std::map<Slots_t, Item*> items) const {
+		void sendInventoryImbuements(const phmap::btree_map<Slots_t, Item*> items) const {
 			if (client) {
 				client->sendInventoryImbuements(items);
 			}
@@ -2378,13 +2441,38 @@ class Player final : public Creature, public Cylinder {
 				activeConcoctions[itemId] = timeLeft;
 			}
 		}
-		std::map<uint16_t, uint16_t> getActiveConcoctions() const {
+		phmap::btree_map<uint16_t, uint16_t> getActiveConcoctions() const {
 			return activeConcoctions;
 		}
+
+		bool checkAutoLoot() const {
+			const bool autoLoot = g_configManager().getBoolean(AUTOLOOT) && getStorageValue(STORAGEVALUE_AUTO_LOOT) != 0;
+			if (g_configManager().getBoolean(VIP_SYSTEM_ENABLED) && g_configManager().getBoolean(VIP_AUTOLOOT_VIP_ONLY)) {
+				return autoLoot && isVip();
+			}
+			return autoLoot;
+		}
+
+		// Get specific inventory item from itemid
+		std::vector<Item*> getInventoryItemsFromId(uint16_t itemId, bool ignore = true) const;
+
+		// This get all player inventory items
+		std::vector<Item*> getAllInventoryItems(bool ignoreEquiped = false, bool ignoreItemWithTier = false) const;
+
+		/**
+		 * @brief Get the equipped items of the player.
+		 * @details This function returns a vector containing the items currently equipped by the player
+		 * @return A vector of pointers to the equipped items.
+		 */
+		std::vector<Item*> getEquippedItems() const;
 
 		// Player wheel methods interface
 		std::unique_ptr<PlayerWheel> &wheel();
 		const std::unique_ptr<PlayerWheel> &wheel() const;
+
+		void sendLootMessage(const std::string &message) const;
+
+		Container* getLootPouch() const;
 
 	private:
 		static uint32_t playerFirstID;
@@ -2441,16 +2529,11 @@ class Player final : public Creature, public Cylinder {
 		void stashContainer(StashContainerList itemDict);
 		ItemsTierCountList getInventoryItemsId() const;
 
-		// Get specific inventory item from itemid
-		std::vector<Item*> getInventoryItemsFromId(uint16_t itemId, bool ignore = true) const;
-
-		// This get all player inventory items
-		std::vector<Item*> getAllInventoryItems(bool ignoreEquiped = false, bool ignoreItemWithTier = false) const;
 		// This function is a override function of base class
-		std::map<uint32_t, uint32_t> &getAllItemTypeCount(std::map<uint32_t, uint32_t> &countMap) const override;
+		phmap::btree_map<uint32_t, uint32_t> &getAllItemTypeCount(phmap::btree_map<uint32_t, uint32_t> &countMap) const override;
 		// Function from player class with correct type sizes (uint16_t)
-		std::map<uint16_t, uint16_t> &getAllSaleItemIdAndCount(std::map<uint16_t, uint16_t> &countMap) const;
-		void getAllItemTypeCountAndSubtype(std::map<uint32_t, uint32_t> &countMap) const;
+		phmap::btree_map<uint16_t, uint16_t> &getAllSaleItemIdAndCount(phmap::btree_map<uint16_t, uint16_t> &countMap) const;
+		void getAllItemTypeCountAndSubtype(phmap::btree_map<uint32_t, uint32_t> &countMap) const;
 		Item* getForgeItemFromId(uint16_t itemId, uint8_t tier);
 		Thing* getThing(size_t index) const override;
 
@@ -2461,22 +2544,22 @@ class Player final : public Creature, public Cylinder {
 
 		phmap::flat_hash_set<uint32_t> VIPList;
 
-		std::map<uint8_t, OpenContainer> openContainers;
-		std::map<uint32_t, DepotLocker*> depotLockerMap;
-		std::map<uint32_t, DepotChest*> depotChests;
-		std::map<uint8_t, int64_t> moduleDelayMap;
-		std::map<uint32_t, int32_t> storageMap;
-		std::map<uint16_t, uint64_t> itemPriceMap;
+		phmap::btree_map<uint8_t, OpenContainer> openContainers;
+		phmap::btree_map<uint32_t, DepotLocker*> depotLockerMap;
+		phmap::btree_map<uint32_t, DepotChest*> depotChests;
+		phmap::btree_map<uint8_t, int64_t> moduleDelayMap;
+		phmap::btree_map<uint32_t, int32_t> storageMap;
+		phmap::btree_map<uint16_t, uint64_t> itemPriceMap;
 
-		std::map<uint8_t, uint16_t> maxValuePerSkill = {
+		phmap::btree_map<uint8_t, uint16_t> maxValuePerSkill = {
 			{ SKILL_LIFE_LEECH_CHANCE, 100 },
 			{ SKILL_MANA_LEECH_CHANCE, 100 },
 			{ SKILL_CRITICAL_HIT_CHANCE, g_configManager().getNumber(CRITICALCHANCE) }
 		};
 
-		std::map<uint64_t, Reward*> rewardMap;
+		phmap::btree_map<uint64_t, Reward*> rewardMap;
 
-		std::map<ObjectCategory_t, Container*> quickLootContainers;
+		phmap::btree_map<ObjectCategory_t, Container*> quickLootContainers;
 		std::vector<ForgeHistory> forgeHistoryVector;
 
 		std::vector<uint16_t> quickLootListItemIds;
@@ -2560,8 +2643,8 @@ class Player final : public Creature, public Cylinder {
 		uint32_t capacity = 40000;
 		uint32_t bonusCapacity = 0;
 		uint32_t damageImmunities = 0;
-		uint32_t conditionImmunities = 0;
-		uint32_t conditionSuppressions = 0;
+		std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> conditionImmunities = {};
+		std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> conditionSuppressions = {};
 		uint32_t level = 1;
 		uint32_t magLevel = 0;
 		uint32_t actionTaskEvent = 0;
@@ -2681,7 +2764,13 @@ class Player final : public Creature, public Cylinder {
 
 		// Concoctions
 		// [ConcoctionID] = time
-		std::map<uint16_t, uint16_t> activeConcoctions;
+		phmap::btree_map<uint16_t, uint16_t> activeConcoctions;
+
+		int32_t specializedMagicLevel[COMBAT_COUNT] = { 0 };
+		int32_t cleavePercent = 0;
+		phmap::btree_map<uint8_t, int32_t> perfectShot;
+		int32_t magicShieldCapacityFlat = 0;
+		int32_t magicShieldCapacityPercent = 0;
 
 		void updateItemsLight(bool internal = false);
 		uint16_t getStepSpeed() const override {
@@ -2728,10 +2817,10 @@ class Player final : public Creature, public Cylinder {
 		uint32_t getDamageImmunities() const override {
 			return damageImmunities;
 		}
-		uint32_t getConditionImmunities() const override {
+		const std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> &getConditionImmunities() const override {
 			return conditionImmunities;
 		}
-		uint32_t getConditionSuppressions() const override {
+		const std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> &getConditionSuppressions() const override {
 			return conditionSuppressions;
 		}
 		uint16_t getLookCorpse() const override;
@@ -2762,6 +2851,7 @@ class Player final : public Creature, public Cylinder {
 		std::unique_ptr<PlayerWheel> m_wheelPlayer;
 
 		account::Account* account_;
+		bool online = true;
 
 		bool hasQuiverEquipped() const;
 
@@ -2775,9 +2865,6 @@ class Player final : public Creature, public Cylinder {
 		void updateDamageReductionFromItemImbuement(std::array<double_t, COMBAT_COUNT> &combatReductionMap, Item* item, uint16_t combatTypeIndex) const;
 		void updateDamageReductionFromItemAbility(std::array<double_t, COMBAT_COUNT> &combatReductionMap, const Item* item, uint16_t combatTypeIndex) const;
 		double_t calculateDamageReduction(double_t currentTotal, int16_t resistance) const;
-
-		void removeEmptyRewards();
-		bool hasOtherRewardContainerOpen(const Container* container) const;
 };
 
 #endif // SRC_CREATURES_PLAYERS_PLAYER_H_

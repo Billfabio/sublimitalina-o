@@ -658,10 +658,13 @@ int MonsterTypeFunctions::luaMonsterTypeCombatImmunities(lua_State* L) {
 			} else if (immunity == "manadrain") {
 				monsterType->info.damageImmunities |= COMBAT_MANADRAIN;
 				pushBoolean(L, true);
+			} else if (immunity == "neutral") {
+				monsterType->info.damageImmunities |= COMBAT_NEUTRALDAMAGE;
+				pushBoolean(L, true);
 			} else {
-				SPDLOG_WARN("[MonsterTypeFunctions::luaMonsterTypeCombatImmunities] - "
-							"Unknown immunity name {} for monster: {}",
-							immunity, monsterType->name);
+				g_logger().warn("[MonsterTypeFunctions::luaMonsterTypeCombatImmunities] - "
+								"Unknown immunity name {} for monster: {}",
+								immunity, monsterType->name);
 				lua_pushnil(L);
 			}
 		}
@@ -676,55 +679,53 @@ int MonsterTypeFunctions::luaMonsterTypeConditionImmunities(lua_State* L) {
 	MonsterType* monsterType = getUserdata<MonsterType>(L, 1);
 	if (monsterType) {
 		if (lua_gettop(L) == 1) {
-			lua_pushnumber(L, monsterType->info.conditionImmunities);
+			lua_createtable(L, monsterType->info.conditionImmunities.size(), 0);
+			int8_t conditionCount = -1;
+			for (auto &condition : monsterType->info.conditionImmunities) {
+				conditionCount++;
+				lua_pushnumber(L, condition);
+				lua_rawseti(L, -2, conditionCount);
+			}
 		} else {
 			std::string immunity = getString(L, 2);
+			ConditionType_t condition = CONDITION_NONE;
 			if (immunity == "physical") {
-				monsterType->info.conditionImmunities |= CONDITION_BLEEDING;
-				pushBoolean(L, true);
+				condition = CONDITION_BLEEDING;
 			} else if (immunity == "energy") {
-				monsterType->info.conditionImmunities |= CONDITION_ENERGY;
-				pushBoolean(L, true);
+				condition = CONDITION_ENERGY;
 			} else if (immunity == "fire") {
-				monsterType->info.conditionImmunities |= CONDITION_FIRE;
-				pushBoolean(L, true);
+				condition = CONDITION_FIRE;
 			} else if (immunity == "poison" || immunity == "earth") {
-				monsterType->info.conditionImmunities |= CONDITION_POISON;
-				pushBoolean(L, true);
+				condition = CONDITION_POISON;
 			} else if (immunity == "drown") {
-				monsterType->info.conditionImmunities |= CONDITION_DROWN;
-				pushBoolean(L, true);
+				condition = CONDITION_DROWN;
 			} else if (immunity == "ice") {
-				monsterType->info.conditionImmunities |= CONDITION_FREEZING;
-				pushBoolean(L, true);
+				condition = CONDITION_FREEZING;
 			} else if (immunity == "holy") {
-				monsterType->info.conditionImmunities |= CONDITION_DAZZLED;
-				pushBoolean(L, true);
+				condition = CONDITION_DAZZLED;
 			} else if (immunity == "death") {
-				monsterType->info.conditionImmunities |= CONDITION_CURSED;
-				pushBoolean(L, true);
+				condition = CONDITION_CURSED;
 			} else if (immunity == "paralyze") {
-				monsterType->info.conditionImmunities |= CONDITION_PARALYZE;
-				pushBoolean(L, true);
+				condition = CONDITION_PARALYZE;
 			} else if (immunity == "outfit") {
-				monsterType->info.conditionImmunities |= CONDITION_OUTFIT;
-				pushBoolean(L, true);
+				condition = CONDITION_OUTFIT;
 			} else if (immunity == "drunk") {
-				monsterType->info.conditionImmunities |= CONDITION_DRUNK;
-				pushBoolean(L, true);
+				condition = CONDITION_DRUNK;
 			} else if (immunity == "invisible" || immunity == "invisibility") {
-				monsterType->info.conditionImmunities |= CONDITION_INVISIBLE;
-				pushBoolean(L, true);
+				condition = CONDITION_INVISIBLE;
 			} else if (immunity == "bleed") {
-				monsterType->info.conditionImmunities |= CONDITION_BLEEDING;
-				pushBoolean(L, true);
+				condition = CONDITION_BLEEDING;
 			} else {
-				SPDLOG_WARN("[MonsterTypeFunctions::luaMonsterTypeConditionImmunities] - "
-							"Unknown immunity name: {} for monster: {}",
-							immunity, monsterType->name);
+				g_logger().warn("[MonsterTypeFunctions::luaMonsterTypeConditionImmunities] - "
+								"Unknown immunity name: {} for monster: {}",
+								immunity, monsterType->name);
 				lua_pushnil(L);
 			}
+
+			monsterType->info.conditionImmunities[condition] = condition;
 		}
+
+		pushBoolean(L, true);
 	} else {
 		lua_pushnil(L);
 	}
@@ -770,7 +771,7 @@ int MonsterTypeFunctions::luaMonsterTypeAddAttack(lua_State* L) {
 			if (g_monsters().deserializeSpell(spell, sb, monsterType->name)) {
 				monsterType->info.attackSpells.push_back(std::move(sb));
 			} else {
-				SPDLOG_WARN("Monster: {}, cant load spell: {}", monsterType->name, spell->name);
+				g_logger().warn("Monster: {}, cant load spell: {}", monsterType->name, spell->name);
 			}
 		} else {
 			lua_pushnil(L);
@@ -831,7 +832,7 @@ int MonsterTypeFunctions::luaMonsterTypeAddDefense(lua_State* L) {
 			if (g_monsters().deserializeSpell(spell, sb, monsterType->name)) {
 				monsterType->info.defenseSpells.push_back(std::move(sb));
 			} else {
-				SPDLOG_WARN("Monster: {}, Cant load spell: {}", monsterType->name, spell->name);
+				g_logger().warn("Monster: {}, Cant load spell: {}", monsterType->name, spell->name);
 			}
 		} else {
 			lua_pushnil(L);
@@ -1134,7 +1135,7 @@ int MonsterTypeFunctions::luaMonsterTypeOutfit(lua_State* L) {
 		} else {
 			Outfit_t outfit = getOutfit(L, 2);
 			if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS) && outfit.lookType != 0 && !g_game().isLookTypeRegistered(outfit.lookType)) {
-				SPDLOG_WARN("[MonsterTypeFunctions::luaMonsterTypeOutfit] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
+				g_logger().warn("[MonsterTypeFunctions::luaMonsterTypeOutfit] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
 				lua_pushnil(L);
 			} else {
 				monsterType->info.outfit = outfit;
@@ -1168,9 +1169,9 @@ int MonsterTypeFunctions::luaMonsterTypeRace(lua_State* L) {
 			} else if (race == "ink") {
 				monsterType->info.race = RACE_INK;
 			} else {
-				SPDLOG_WARN("[MonsterTypeFunctions::luaMonsterTypeRace] - "
-							"Unknown race type {}",
-							race);
+				g_logger().warn("[MonsterTypeFunctions::luaMonsterTypeRace] - "
+								"Unknown race type {}",
+								race);
 				lua_pushnil(L);
 				return 1;
 			}
@@ -1509,6 +1510,10 @@ int MonsterTypeFunctions::luaMonsterTypeBossRace(lua_State* L) {
 	}
 
 	if (lua_gettop(L) == 1) {
+		if (monsterType->info.bosstiaryClass.empty()) {
+			lua_pushnil(L);
+			return 1;
+		}
 		pushString(L, monsterType->info.bosstiaryClass);
 	} else {
 		auto bossRace = getNumber<uint8_t>(L, 2, 0);
@@ -1532,10 +1537,14 @@ int MonsterTypeFunctions::luaMonsterTypeBossRaceId(lua_State* L) {
 	}
 
 	if (lua_gettop(L) == 1) {
-		lua_pushnumber(L, static_cast<lua_Number>(monsterType->info.bossRaceId));
+		if (monsterType->info.bosstiaryClass.empty()) {
+			lua_pushnumber(L, 0);
+		} else {
+			lua_pushnumber(L, static_cast<lua_Number>(monsterType->info.bosstiaryRace));
+		}
 	} else {
 		auto raceId = getNumber<uint16_t>(L, 2, 0);
-		monsterType->info.bossRaceId = raceId;
+		monsterType->info.raceid = raceId;
 		g_ioBosstiary().addBosstiaryMonster(raceId, monsterType->name);
 		pushBoolean(L, true);
 	}
@@ -1649,77 +1658,5 @@ int MonsterTypeFunctions::luaMonsterTypedeathSound(lua_State* L) {
 		pushBoolean(L, true);
 	}
 
-	return 1;
-}
-
-int MonsterTypeFunctions::luaMonsterTypeHazardSystemCrit(lua_State* L) {
-	// get: monsterType:hazardSystemCrit() set: monsterType:hazardSystemCrit(chance)
-	MonsterType* monsterType = getUserdata<MonsterType>(L, 1);
-	if (!monsterType) {
-		pushBoolean(L, false);
-		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_TYPE_NOT_FOUND));
-		return 0;
-	}
-
-	if (lua_gettop(L) == 1) {
-		lua_pushnumber(L, monsterType->info.hazardSystemCritChance);
-	} else {
-		monsterType->info.hazardSystemCritChance = std::min<uint16_t>(10000, static_cast<uint16_t>(getNumber<double>(L, 2) * 100));
-		pushBoolean(L, true);
-	}
-	return 1;
-}
-
-int MonsterTypeFunctions::luaMonsterTypeHazardSystemDodge(lua_State* L) {
-	// get: monsterType:hazardSystemDodge() set: monsterType:hazardSystemDodge(bool)
-	MonsterType* monsterType = getUserdata<MonsterType>(L, 1);
-	if (!monsterType) {
-		pushBoolean(L, false);
-		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_TYPE_NOT_FOUND));
-		return 0;
-	}
-
-	if (lua_gettop(L) == 1) {
-		pushBoolean(L, monsterType->info.canDodge);
-	} else {
-		monsterType->info.canDodge = getBoolean(L, 2);
-		pushBoolean(L, true);
-	}
-	return 1;
-}
-
-int MonsterTypeFunctions::luaMonsterTypeHazardSystemSpawnPod(lua_State* L) {
-	// get: monsterType:hazardSystemSpawnPod() set: monsterType:hazardSystemSpawnPod(bool)
-	MonsterType* monsterType = getUserdata<MonsterType>(L, 1);
-	if (!monsterType) {
-		pushBoolean(L, false);
-		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_TYPE_NOT_FOUND));
-		return 0;
-	}
-
-	if (lua_gettop(L) == 1) {
-		pushBoolean(L, monsterType->info.canSpawnPod);
-	} else {
-		monsterType->info.canSpawnPod = getBoolean(L, 2);
-		pushBoolean(L, true);
-	}
-	return 1;
-}
-
-int MonsterTypeFunctions::luaMonsterTypeHazardSystemDamageBoost(lua_State* L) {
-	// get: monsterType:hazardSystemDamageBoost() set: monsterType:hazardSystemDamageBoost(bool)
-	MonsterType* monsterType = getUserdata<MonsterType>(L, 1);
-	if (!monsterType) {
-		pushBoolean(L, false);
-		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_TYPE_NOT_FOUND));
-		return 0;
-	}
-
-	if (lua_gettop(L) == 1) {
-		pushBoolean(L, monsterType->info.canDamageBoost);
-	} else {
-		monsterType->info.canDamageBoost = getBoolean(L, 2);
-		pushBoolean(L, true);
-	}
 	return 1;
 }

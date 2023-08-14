@@ -259,9 +259,9 @@ void House::handleWrapableItem(ItemList &moveItemList, Item* item, Player* playe
 		handleContainer(moveItemList, item);
 	}
 
-	Item* newItem = g_game().wrapItem(item);
+	Item* newItem = g_game().wrapItem(item, houseTile->getHouse());
 	if (newItem->isRemoved() && !newItem->getParent()) {
-		SPDLOG_WARN("[{}] item removed during wrapping - check ground type - player name: {} item id: {} position: {}", __FUNCTION__, player->getName(), item->getID(), houseTile->getPosition().toString());
+		g_logger().warn("[{}] item removed during wrapping - check ground type - player name: {} item id: {} position: {}", __FUNCTION__, player->getName(), item->getID(), houseTile->getPosition().toString());
 		return;
 	}
 
@@ -315,6 +315,11 @@ void House::removeDoor(Door* door) {
 void House::addBed(BedItem* bed) {
 	bedsList.push_back(bed);
 	bed->setHouse(this);
+}
+
+void House::removeBed(BedItem* bed) {
+	bed->setHouse(nullptr);
+	bedsList.remove(bed);
 }
 
 Door* House::getDoorByNumber(uint32_t doorId) const {
@@ -406,15 +411,16 @@ bool House::executeTransfer(HouseTransferItem* item, Player* newOwner) {
 }
 
 void AccessList::parseList(const std::string &list) {
+	std::string validList = validateNameHouse(list);
 	playerList.clear();
 	guildRankList.clear();
 	allowEveryone = false;
-	this->list = list;
+	this->list = validList;
 	if (list.empty()) {
 		return;
 	}
 
-	auto lines = explodeString(list, "\n", 100);
+	auto lines = explodeString(validList, "\n", 100);
 	for (auto &line : lines) {
 		trimString(line);
 		trim_left(line, '\t');
@@ -604,7 +610,7 @@ bool Houses::loadHousesXML(const std::string &filename) {
 
 		House* house = getHouse(houseId);
 		if (!house) {
-			SPDLOG_ERROR("[Houses::loadHousesXML] - Unknown house, id: {}", houseId);
+			g_logger().error("[Houses::loadHousesXML] - Unknown house, id: {}", houseId);
 			return false;
 		}
 
@@ -616,14 +622,20 @@ bool Houses::loadHousesXML(const std::string &filename) {
 			pugi::cast<uint16_t>(houseNode.attribute("entryz").value())
 		);
 		if (entryPos.x == 0 && entryPos.y == 0 && entryPos.z == 0) {
-			SPDLOG_WARN("[Houses::loadHousesXML] - Entry not set for house "
-						"name: {} with id: {}",
-						house->getName(), houseId);
+			g_logger().warn("[Houses::loadHousesXML] - Entry not set for house "
+							"name: {} with id: {}",
+							house->getName(), houseId);
 		}
 		house->setEntryPos(entryPos);
 
 		house->setRent(pugi::cast<uint32_t>(houseNode.attribute("rent").value()));
 		house->setTownId(pugi::cast<uint32_t>(houseNode.attribute("townid").value()));
+		auto maxBedsAttr = houseNode.attribute("beds");
+		int32_t maxBeds = -1;
+		if (!maxBedsAttr.empty()) {
+			maxBeds = pugi::cast<int32_t>(maxBedsAttr.value());
+		}
+		house->setMaxBeds(maxBeds);
 
 		house->setOwner(0, false);
 	}

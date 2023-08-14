@@ -34,7 +34,7 @@ int32_t Combat::getLevelFormula(const Player* player, const Spell* wheelSpell, c
 		}
 	}
 
-	int32_t levelFormula = player->getLevel() * 2 + /*player->getSpecializedMagicLevel() +*/ magicLevelSkill * 3;
+	int32_t levelFormula = player->getLevel() * 2 + (player->getMagicLevel() + player->getSpecializedMagicLevel(damage.primary.type, true)) * 3;
 	return levelFormula;
 }
 
@@ -237,12 +237,15 @@ ReturnValue Combat::canTargetCreature(Player* player, Creature* target) {
 		}
 	}
 
-	return Combat::canDoCombat(player, target);
+	return Combat::canDoCombat(player, target, true);
 }
 
 ReturnValue Combat::canDoCombat(Creature* caster, Tile* tile, bool aggressive) {
 	if (tile->hasProperty(CONST_PROP_BLOCKPROJECTILE)) {
 		return RETURNVALUE_NOTENOUGHROOM;
+	}
+	if (aggressive && tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
+		return RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
 	}
 
 	if (tile->hasFlag(TILESTATE_FLOORCHANGE)) {
@@ -269,11 +272,6 @@ ReturnValue Combat::canDoCombat(Creature* caster, Tile* tile, bool aggressive) {
 		}
 	}
 
-	// pz-zone
-	if (aggressive && tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
-		return RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
-	}
-
 	return g_events().eventCreatureOnAreaCombat(caster, tile, aggressive);
 }
 
@@ -298,10 +296,25 @@ bool Combat::isProtected(const Player* attacker, const Player* target) {
 	return false;
 }
 
-ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target) {
+ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target, bool aggressive) {
+	if (!aggressive) {
+		return RETURNVALUE_NOERROR;
+	}
+
+	if (target) {
+		const Tile* tile = target->getTile();
+		if (tile->hasProperty(CONST_PROP_BLOCKPROJECTILE)) {
+			return RETURNVALUE_NOTENOUGHROOM;
+		}
+		if (tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
+			return RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
+		}
+	}
+
 	if (attacker) {
 		const Creature* attackerMaster = attacker->getMaster();
-		if (const Player* targetPlayer = target->getPlayer()) {
+		auto targetPlayer = target->getPlayer() ? target->getPlayer() : nullptr;
+		if (targetPlayer) {
 			if (targetPlayer->hasFlag(PlayerFlags_t::CannotBeAttacked)) {
 				return RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER;
 			}
@@ -352,7 +365,6 @@ ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target) {
 				}
 			}
 		} else if (target && target->getMonster()) {
-
 			if (attacker->getFaction() != FACTION_DEFAULT && attacker->getFaction() != FACTION_PLAYER && attacker->getMonster() && !attacker->getMonster()->isEnemyFaction(target->getFaction())) {
 				return RETURNVALUE_YOUMAYNOTATTACKTHISCREATURE;
 			}
@@ -369,7 +381,6 @@ ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target) {
 				const Creature* targetMaster = target->getMaster();
 
 				if ((!targetMaster || !targetMaster->getPlayer()) && attacker->getFaction() == FACTION_DEFAULT) {
-
 					if (!attackerMaster || !attackerMaster->getPlayer()) {
 						return RETURNVALUE_YOUMAYNOTATTACKTHISCREATURE;
 					}
@@ -414,12 +425,12 @@ bool Combat::setParam(CombatParam_t param, uint32_t value) {
 		}
 
 		case COMBAT_PARAM_EFFECT: {
-			params.impactEffect = static_cast<uint8_t>(value);
+			params.impactEffect = static_cast<uint16_t>(value);
 			return true;
 		}
 
 		case COMBAT_PARAM_DISTANCEEFFECT: {
-			params.distanceEffect = static_cast<uint8_t>(value);
+			params.distanceEffect = static_cast<uint16_t>(value);
 			return true;
 		}
 
@@ -467,6 +478,11 @@ bool Combat::setParam(CombatParam_t param, uint32_t value) {
 			params.soundCastEffect = static_cast<SoundEffect_t>(value);
 			return true;
 		}
+
+		case COMBAT_PARAM_CHAIN_EFFECT: {
+			params.chainEffect = static_cast<uint8_t>(value);
+			return true;
+		}
 	}
 	return false;
 }
@@ -492,6 +508,16 @@ bool Combat::setCallback(CallBackParam_t key) {
 			params.targetCallback.reset(new TargetCallback());
 			return true;
 		}
+
+		case CALLBACK_PARAM_CHAINVALUE: {
+			params.chainCallback.reset(new ChainCallback());
+			return true;
+		}
+
+		case CALLBACK_PARAM_CHAINPICKER: {
+			params.chainPickerCallback.reset(new ChainPickerCallback());
+			return true;
+		}
 	}
 	return false;
 }
@@ -509,6 +535,14 @@ CallBack* Combat::getCallback(CallBackParam_t key) {
 
 		case CALLBACK_PARAM_TARGETCREATURE: {
 			return params.targetCallback.get();
+		}
+
+		case CALLBACK_PARAM_CHAINVALUE: {
+			return params.chainCallback.get();
+		}
+
+		case CALLBACK_PARAM_CHAINPICKER: {
+			return params.chainPickerCallback.get();
 		}
 	}
 	return nullptr;
@@ -645,7 +679,7 @@ bool Combat::checkFearConditionAffected(Player* player) {
 	Party* party = player->getParty();
 	if (party) {
 		auto affectedCount = (party->getMemberCount() + 5) / 5;
-		SPDLOG_DEBUG("[{}] Player is member of a party, {} members can be feared", __FUNCTION__, affectedCount);
+		g_logger().debug("[{}] Player is member of a party, {} members can be feared", __FUNCTION__, affectedCount);
 
 		for (const auto member : party->getMembers()) {
 			if (member->hasCondition(CONDITION_FEARED)) {
@@ -816,9 +850,9 @@ void Combat::combatTileEffects(const SpectatorHashSet &spectators, Creature* cas
 	}
 }
 
-void Combat::postCombatEffects(Creature* caster, const Position &pos, const CombatParams &params) {
+void Combat::postCombatEffects(Creature* caster, const Position &origin, const Position &pos, const CombatParams &params) {
 	if (caster && params.distanceEffect != CONST_ANI_NONE) {
-		addDistanceEffect(caster, caster->getPosition(), pos, params.distanceEffect);
+		addDistanceEffect(caster, origin, pos, params.distanceEffect);
 	}
 
 	if (params.soundImpactEffect != SoundEffect_t::SILENCE) {
@@ -828,7 +862,7 @@ void Combat::postCombatEffects(Creature* caster, const Position &pos, const Comb
 	}
 }
 
-void Combat::addDistanceEffect(Creature* caster, const Position &fromPos, const Position &toPos, uint8_t effect) {
+void Combat::addDistanceEffect(Creature* caster, const Position &fromPos, const Position &toPos, uint16_t effect) {
 	if (effect == CONST_ANI_WEAPONTYPE) {
 		if (!caster) {
 			return;
@@ -860,21 +894,87 @@ void Combat::addDistanceEffect(Creature* caster, const Position &fromPos, const 
 	}
 }
 
-void Combat::doCombat(Creature* caster, Creature* target) const {
+void Combat::doChainEffect(const Position &origin, const Position &dest, uint8_t effect) {
+	if (effect > 0) {
+		std::forward_list<Direction> dirList;
+		FindPathParams fpp;
+		fpp.minTargetDist = 0;
+		fpp.maxTargetDist = 1;
+		fpp.maxSearchDist = 9;
+		Position pos = origin;
+		if (g_game().map.getPathMatching(origin, dirList, FrozenPathingConditionCall(dest), fpp)) {
+			for (auto dir : dirList) {
+				pos = getNextPosition(dir, pos);
+				g_game().addMagicEffect(pos, effect);
+			}
+		}
+		g_game().addMagicEffect(dest, effect);
+	}
+}
+
+bool Combat::doCombatChain(Creature* caster, Creature* target, bool aggressive) const {
+	auto targets = std::vector<Creature*>();
+	auto targetSet = phmap::btree_set<uint32_t>();
+	auto visitedChain = phmap::btree_set<uint32_t>();
+	if (target != nullptr) {
+		targets.push_back(target);
+		targetSet.insert(target->getID());
+	}
+	if (caster != nullptr) {
+		visitedChain.insert(caster->getID());
+	}
+	if (params.chainCallback) {
+		uint8_t maxTargets, chainDistance;
+		bool backtracking = false;
+		params.chainCallback->onChainCombat(caster, maxTargets, chainDistance, backtracking);
+		pickChainTargets(caster, targets, targetSet, visitedChain, params, chainDistance, maxTargets, backtracking, aggressive);
+	}
+	if (targets.empty() || targets.size() == 1 && targets[0] == caster) {
+		return false;
+	}
+	Creature* previousTarget = caster;
+	for (auto currentTarget : targets) {
+		if (currentTarget == caster) {
+			continue;
+		}
+		g_logger().debug("Combat: {} -> {}", previousTarget ? previousTarget->getName() : "none", currentTarget ? currentTarget->getName() : "none");
+		auto origin = previousTarget != nullptr ? previousTarget->getPosition() : Position();
+		doChainEffect(origin, currentTarget->getPosition(), params.chainEffect);
+		doCombat(caster, currentTarget, origin);
+		previousTarget = currentTarget;
+	}
+	return true;
+}
+
+bool Combat::doCombat(Creature* caster, Creature* target) const {
+	if (caster != nullptr && params.chainCallback) {
+		return doCombatChain(caster, target, params.aggressive);
+	}
+
+	return doCombat(caster, target, caster != nullptr ? caster->getPosition() : Position());
+}
+
+bool Combat::doCombat(Creature* caster, Creature* target, const Position &origin) const {
 	// target combat callback function
 	if (params.combatType != COMBAT_NONE) {
 		CombatDamage damage = getCombatDamage(caster, target);
 		if (damage.primary.type != COMBAT_MANADRAIN) {
-			doCombatHealth(caster, target, damage, params);
+			doCombatHealth(caster, target, origin, damage, params);
 		} else {
-			doCombatMana(caster, target, damage, params);
+			doCombatMana(caster, target, origin, damage, params);
 		}
 	} else {
-		doCombatDefault(caster, target, params);
+		doCombatDefault(caster, target, origin, params);
 	}
+
+	return true;
 }
 
-void Combat::doCombat(Creature* caster, const Position &position) const {
+bool Combat::doCombat(Creature* caster, const Position &position) const {
+	if (caster != nullptr && params.chainCallback) {
+		return doCombatChain(caster, caster, params.aggressive);
+	}
+
 	// area combat callback function
 	if (params.combatType != COMBAT_NONE) {
 		CombatDamage damage = getCombatDamage(caster, nullptr);
@@ -884,11 +984,14 @@ void Combat::doCombat(Creature* caster, const Position &position) const {
 			doCombatMana(caster, position, area.get(), damage, params);
 		}
 	} else {
-		CombatFunc(caster, position, area.get(), params, CombatNullFunc, nullptr);
+		auto origin = caster != nullptr ? caster->getPosition() : Position();
+		CombatFunc(caster, origin, position, area.get(), params, CombatNullFunc, nullptr);
 	}
+
+	return true;
 }
 
-void Combat::CombatFunc(Creature* caster, const Position &pos, const AreaCombat* area, const CombatParams &params, CombatFunction func, CombatDamage* data) {
+void Combat::CombatFunc(Creature* caster, const Position &origin, const Position &pos, const AreaCombat* area, const CombatParams &params, CombatFunction func, CombatDamage* data) {
 	std::forward_list<Tile*> tileList;
 
 	if (caster) {
@@ -939,7 +1042,7 @@ void Combat::CombatFunc(Creature* caster, const Position &pos, const AreaCombat*
 					}
 				}
 
-				if (!params.aggressive || (caster != creature && Combat::canDoCombat(caster, creature) == RETURNVALUE_NOERROR)) {
+				if (!params.aggressive || (caster != creature && Combat::canDoCombat(caster, creature, params.aggressive) == RETURNVALUE_NOERROR)) {
 					affected++;
 				}
 			}
@@ -993,7 +1096,7 @@ void Combat::CombatFunc(Creature* caster, const Position &pos, const AreaCombat*
 					}
 				}
 
-				if (!params.aggressive || (caster != creature && Combat::canDoCombat(caster, creature) == RETURNVALUE_NOERROR)) {
+				if (!params.aggressive || (caster != creature && Combat::canDoCombat(caster, creature, params.aggressive) == RETURNVALUE_NOERROR)) {
 					// Wheel of destiny update beam mastery damage
 					if (casterPlayer) {
 						casterPlayer->wheel()->updateBeamMasteryDamage(tmpDamage, beamAffectedTotal, beamAffectedCurrent);
@@ -1017,11 +1120,15 @@ void Combat::CombatFunc(Creature* caster, const Position &pos, const AreaCombat*
 		casterPlayer->wheel()->updateBeamMasteryDamage(tmpDamage, beamAffectedTotal, beamAffectedCurrent);
 	}
 
-	postCombatEffects(caster, pos, params);
+	postCombatEffects(caster, origin, pos, params);
 }
 
 void Combat::doCombatHealth(Creature* caster, Creature* target, CombatDamage &damage, const CombatParams &params) {
-	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target) == RETURNVALUE_NOERROR);
+	doCombatHealth(caster, target, caster ? caster->getPosition() : Position(), damage, params);
+}
+
+void Combat::doCombatHealth(Creature* caster, Creature* target, const Position &origin, CombatDamage &damage, const CombatParams &params) {
+	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target, params.aggressive) == RETURNVALUE_NOERROR);
 	if ((caster && target)
 		&& (caster == target || canCombat)
 		&& (params.impactEffect != CONST_ME_NONE)) {
@@ -1034,7 +1141,7 @@ void Combat::doCombatHealth(Creature* caster, Creature* target, CombatDamage &da
 		}
 	}
 
-	if (caster && caster->getPlayer()) {
+	if (!damage.extension && caster && caster->getPlayer()) {
 		// Critical damage
 		uint16_t chance = caster->getPlayer()->getSkillLevel(SKILL_CRITICAL_HIT_CHANCE) + (uint16_t)damage.criticalChance;
 		// Charm low blow rune)
@@ -1072,7 +1179,7 @@ void Combat::doCombatHealth(Creature* caster, Creature* target, CombatDamage &da
 
 	if (canCombat) {
 		if (target && caster && params.distanceEffect != CONST_ANI_NONE) {
-			addDistanceEffect(caster, caster->getPosition(), target->getPosition(), params.distanceEffect);
+			addDistanceEffect(caster, origin, target->getPosition(), params.distanceEffect);
 		}
 
 		CombatHealthFunc(caster, target, params, &damage);
@@ -1110,11 +1217,16 @@ void Combat::doCombatHealth(Creature* caster, const Position &position, const Ar
 			}
 		}
 	}
-	CombatFunc(caster, position, area, params, CombatHealthFunc, &damage);
+	const auto &origin = caster ? caster->getPosition() : Position();
+	CombatFunc(caster, origin, position, area, params, CombatHealthFunc, &damage);
 }
 
 void Combat::doCombatMana(Creature* caster, Creature* target, CombatDamage &damage, const CombatParams &params) {
-	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target) == RETURNVALUE_NOERROR);
+	doCombatMana(caster, target, caster ? caster->getPosition() : Position(), damage, params);
+}
+
+void Combat::doCombatMana(Creature* caster, Creature* target, const Position &origin, CombatDamage &damage, const CombatParams &params) {
+	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target, params.aggressive) == RETURNVALUE_NOERROR);
 	if ((caster && target)
 		&& (caster == target || canCombat)
 		&& (params.impactEffect != CONST_ME_NONE)) {
@@ -1133,7 +1245,7 @@ void Combat::doCombatMana(Creature* caster, Creature* target, CombatDamage &dama
 
 	if (canCombat) {
 		if (caster && target && params.distanceEffect != CONST_ANI_NONE) {
-			addDistanceEffect(caster, caster->getPosition(), target->getPosition(), params.distanceEffect);
+			addDistanceEffect(caster, origin, target->getPosition(), params.distanceEffect);
 		}
 
 		CombatManaFunc(caster, target, params, &damage);
@@ -1159,15 +1271,17 @@ void Combat::doCombatMana(Creature* caster, const Position &position, const Area
 			damage.secondary.value += (damage.secondary.value * (caster->getPlayer()->getSkillLevel(SKILL_CRITICAL_HIT_DAMAGE) + damage.criticalDamage)) / 100;
 		}
 	}
-	CombatFunc(caster, position, area, params, CombatManaFunc, &damage);
+	const auto &origin = caster ? caster->getPosition() : Position();
+	CombatFunc(caster, origin, position, area, params, CombatManaFunc, &damage);
 }
 
 void Combat::doCombatCondition(Creature* caster, const Position &position, const AreaCombat* area, const CombatParams &params) {
-	CombatFunc(caster, position, area, params, CombatConditionFunc, nullptr);
+	const auto &origin = caster ? caster->getPosition() : Position();
+	CombatFunc(caster, origin, position, area, params, CombatConditionFunc, nullptr);
 }
 
 void Combat::doCombatCondition(Creature* caster, Creature* target, const CombatParams &params) {
-	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target) == RETURNVALUE_NOERROR);
+	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target, params.aggressive) == RETURNVALUE_NOERROR);
 	if ((caster == target || canCombat) && params.impactEffect != CONST_ME_NONE) {
 		g_game().addMagicEffect(target->getPosition(), params.impactEffect);
 	}
@@ -1191,11 +1305,12 @@ void Combat::doCombatCondition(Creature* caster, Creature* target, const CombatP
 }
 
 void Combat::doCombatDispel(Creature* caster, const Position &position, const AreaCombat* area, const CombatParams &params) {
-	CombatFunc(caster, position, area, params, CombatDispelFunc, nullptr);
+	const auto &origin = caster ? caster->getPosition() : Position();
+	CombatFunc(caster, origin, position, area, params, CombatDispelFunc, nullptr);
 }
 
 void Combat::doCombatDispel(Creature* caster, Creature* target, const CombatParams &params) {
-	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target) == RETURNVALUE_NOERROR);
+	bool canCombat = !params.aggressive || (caster != target && Combat::canDoCombat(caster, target, params.aggressive) == RETURNVALUE_NOERROR);
 	if ((caster && target)
 		&& (caster == target || canCombat)
 		&& (params.impactEffect != CONST_ME_NONE)) {
@@ -1221,7 +1336,11 @@ void Combat::doCombatDispel(Creature* caster, Creature* target, const CombatPara
 }
 
 void Combat::doCombatDefault(Creature* caster, Creature* target, const CombatParams &params) {
-	if (!params.aggressive || (caster != target && Combat::canDoCombat(caster, target) == RETURNVALUE_NOERROR)) {
+	doCombatDefault(caster, target, caster ? caster->getPosition() : Position(), params);
+}
+
+void Combat::doCombatDefault(Creature* caster, Creature* target, const Position &origin, const CombatParams &params) {
+	if (!params.aggressive || (caster != target && Combat::canDoCombat(caster, target, params.aggressive) == RETURNVALUE_NOERROR)) {
 		SpectatorHashSet spectators;
 		g_game().map.getSpectators(spectators, target->getPosition(), true, true);
 
@@ -1239,7 +1358,7 @@ void Combat::doCombatDefault(Creature* caster, Creature* target, const CombatPar
 		*/
 
 		if (caster && params.distanceEffect != CONST_ANI_NONE) {
-			addDistanceEffect(caster, caster->getPosition(), target->getPosition(), params.distanceEffect);
+			addDistanceEffect(caster, origin, target->getPosition(), params.distanceEffect);
 		}
 
 		if (params.soundImpactEffect != SoundEffect_t::SILENCE) {
@@ -1258,7 +1377,59 @@ void Combat::setRuneSpellName(const std::string &value) {
 	runeSpellName = value;
 }
 
+void Combat::pickChainTargets(Creature* caster, std::vector<Creature*> &targets, phmap::btree_set<uint32_t> &targetSet, phmap::btree_set<uint32_t> &visited, const CombatParams &params, uint8_t chainDistance, uint8_t maxTargets, bool backtracking, bool aggressive) {
+	if (maxTargets == 0 || targets.size() > maxTargets) {
+		return;
+	}
+	// we need a target to chain from
+	if (targets.empty()) {
+		return;
+	}
+
+	auto currentTarget = targets.back();
+	SpectatorHashSet spectators;
+	g_game().map.getSpectators(spectators, currentTarget->getPosition(), false, false, chainDistance, chainDistance, chainDistance, chainDistance);
+	g_logger().debug("Combat::pickChainTargets: currentTarget: {}, spectators: {}", currentTarget->getName(), spectators.size());
+	auto maxBacktrackingAttempts = 10;
+	for (auto attempts = 0; targets.size() <= maxTargets && attempts < maxBacktrackingAttempts; ++attempts) {
+		auto closestDistance = std::numeric_limits<uint16_t>::max();
+		Creature* closestSpectator = nullptr;
+		for (auto spectator : spectators) {
+			Creature* creature = spectator;
+			if (creature == nullptr || visited.contains(creature->getID())) {
+				continue;
+			}
+			bool canCombat = canDoCombat(caster, creature, aggressive) == RETURNVALUE_NOERROR;
+			bool pick = params.chainPickerCallback ? params.chainPickerCallback->onChainCombat(caster, creature) : true;
+			bool hasSight = g_game().isSightClear(currentTarget->getPosition(), creature->getPosition(), true);
+			if (!canCombat || !pick || !hasSight) {
+				visited.insert(creature->getID());
+				continue;
+			}
+
+			auto distance = Position::getDiagonalDistance(currentTarget->getPosition(), creature->getPosition());
+			if (distance < closestDistance) {
+				closestDistance = distance;
+				closestSpectator = spectator;
+			}
+		}
+
+		if (closestSpectator != nullptr) {
+			g_logger().debug("Combat::pickChainTargets: closestSpectator: {}", closestSpectator->getName());
+			targets.push_back(closestSpectator);
+			targetSet.insert(closestSpectator->getID());
+			visited.insert(closestSpectator->getID());
+			pickChainTargets(caster, targets, targetSet, visited, params, chainDistance, maxTargets, backtracking, aggressive);
+		}
+
+		if (!backtracking || closestSpectator == nullptr) {
+			break;
+		}
+	}
+}
+
 //**********************************************************//
+
 uint32_t ValueCallback::getMagicLevelSkill(const Player* player, const CombatDamage &damage) const {
 	if (!player) {
 		return 0;
@@ -1276,15 +1447,15 @@ uint32_t ValueCallback::getMagicLevelSkill(const Player* player, const CombatDam
 		}
 	}
 
-	return magicLevelSkill;
+	return magicLevelSkill + player->getSpecializedMagicLevel(damage.primary.type, true);
 }
 
 void ValueCallback::getMinMaxValues(Player* player, CombatDamage &damage, bool useCharges) const {
 	// onGetPlayerMinMaxValues(...)
 	if (!scriptInterface->reserveScriptEnv()) {
-		SPDLOG_ERROR("[ValueCallback::getMinMaxValues - Player {} formula {}] "
-					 "Call stack overflow. Too many lua script calls being nested.",
-					 player->getName(), fmt::underlying(type));
+		g_logger().error("[ValueCallback::getMinMaxValues - Player {} formula {}] "
+						 "Call stack overflow. Too many lua script calls being nested.",
+						 player->getName(), fmt::underlying(type));
 		return;
 	}
 
@@ -1359,7 +1530,7 @@ void ValueCallback::getMinMaxValues(Player* player, CombatDamage &damage, bool u
 		}
 
 		default: {
-			SPDLOG_WARN("[ValueCallback::getMinMaxValues] - Unknown callback type");
+			g_logger().warn("[ValueCallback::getMinMaxValues] - Unknown callback type");
 			scriptInterface->resetScriptEnv();
 			return;
 		}
@@ -1369,7 +1540,6 @@ void ValueCallback::getMinMaxValues(Player* player, CombatDamage &damage, bool u
 	if (lua_pcall(L, parameters, 2, 0) != 0) {
 		LuaScriptInterface::reportError(nullptr, LuaScriptInterface::popString(L));
 	} else {
-
 		int32_t defaultDmg = normal_random(
 			LuaScriptInterface::getNumber<int32_t>(L, -2),
 			LuaScriptInterface::getNumber<int32_t>(L, -1)
@@ -1381,7 +1551,6 @@ void ValueCallback::getMinMaxValues(Player* player, CombatDamage &damage, bool u
 			int32_t physDmg = std::round(defaultDmg * (1.0 - factor));
 			damage.primary.value = physDmg;
 			damage.secondary.value = elementDamage;
-
 		} else {
 			damage.primary.value = defaultDmg;
 			damage.secondary.type = COMBAT_NONE;
@@ -1403,9 +1572,9 @@ void ValueCallback::getMinMaxValues(Player* player, CombatDamage &damage, bool u
 void TileCallback::onTileCombat(Creature* creature, Tile* tile) const {
 	// onTileCombat(creature, pos)
 	if (!scriptInterface->reserveScriptEnv()) {
-		SPDLOG_ERROR("[TileCallback::onTileCombat - Creature {} type {} on tile x: {} y: {} z: {}] "
-					 "Call stack overflow. Too many lua script calls being nested.",
-					 creature->getName(), fmt::underlying(type), (tile->getPosition()).getX(), (tile->getPosition()).getY(), (tile->getPosition()).getZ());
+		g_logger().error("[TileCallback::onTileCombat - Creature {} type {} on tile x: {} y: {} z: {}] "
+						 "Call stack overflow. Too many lua script calls being nested.",
+						 creature->getName(), fmt::underlying(type), (tile->getPosition()).getX(), (tile->getPosition()).getY(), (tile->getPosition()).getZ());
 		return;
 	}
 
@@ -1434,9 +1603,9 @@ void TileCallback::onTileCombat(Creature* creature, Tile* tile) const {
 void TargetCallback::onTargetCombat(Creature* creature, Creature* target) const {
 	// onTargetCombat(creature, target)
 	if (!scriptInterface->reserveScriptEnv()) {
-		SPDLOG_ERROR("[TargetCallback::onTargetCombat - Creature {}] "
-					 "Call stack overflow. Too many lua script calls being nested.",
-					 creature->getName());
+		g_logger().error("[TargetCallback::onTargetCombat - Creature {}] "
+						 "Call stack overflow. Too many lua script calls being nested.",
+						 creature->getName());
 		return;
 	}
 
@@ -1475,6 +1644,100 @@ void TargetCallback::onTargetCombat(Creature* creature, Creature* target) const 
 	}
 
 	scriptInterface->resetScriptEnv();
+}
+
+//**********************************************************//
+
+void ChainCallback::onChainCombat(Creature* creature, uint8_t &maxTargets, uint8_t &chainDistance, bool &backtracking) const {
+	// onChainCombat(creature)
+	if (!scriptInterface->reserveScriptEnv()) {
+		g_logger().error("[ChainCallback::onTargetCombat - Creature {}] "
+						 "Call stack overflow. Too many lua script calls being nested.",
+						 creature->getName());
+		return;
+	}
+
+	ScriptEnvironment* env = scriptInterface->getScriptEnv();
+	if (!env->setCallbackId(scriptId, scriptInterface)) {
+		scriptInterface->resetScriptEnv();
+		return;
+	}
+
+	lua_State* L = scriptInterface->getLuaState();
+
+	scriptInterface->pushFunction(scriptId);
+
+	if (creature) {
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
+		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
+	} else {
+		lua_pushnil(L);
+	}
+
+	int size0 = lua_gettop(L);
+	if (lua_pcall(L, 1, 3 /*nReturnValues*/, 0) != 0) {
+		LuaScriptInterface::reportError(nullptr, LuaScriptInterface::popString(L));
+	}
+	maxTargets = LuaScriptInterface::getNumber<uint8_t>(L, -3);
+	chainDistance = LuaScriptInterface::getNumber<uint8_t>(L, -2);
+	backtracking = LuaScriptInterface::getBoolean(L, -1);
+	lua_pop(L, 3);
+
+	if ((lua_gettop(L) + 1 /*nParams*/ + 1) != size0) {
+		LuaScriptInterface::reportError(nullptr, "Stack size changed!");
+	}
+
+	scriptInterface->resetScriptEnv();
+}
+
+bool ChainPickerCallback::onChainCombat(Creature* creature, Creature* target) const {
+	// onChainCombat(creature, target)
+	if (!scriptInterface->reserveScriptEnv()) {
+		g_logger().error("[ChainPickerCallback::onTargetCombat - Creature {}] "
+						 "Call stack overflow. Too many lua script calls being nested.",
+						 creature->getName());
+		return true;
+	}
+
+	ScriptEnvironment* env = scriptInterface->getScriptEnv();
+	if (!env->setCallbackId(scriptId, scriptInterface)) {
+		scriptInterface->resetScriptEnv();
+		return true;
+	}
+
+	lua_State* L = scriptInterface->getLuaState();
+
+	scriptInterface->pushFunction(scriptId);
+
+	if (creature) {
+		LuaScriptInterface::pushUserdata<Creature>(L, creature);
+		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
+	} else {
+		lua_pushnil(L);
+	}
+
+	if (target) {
+		LuaScriptInterface::pushUserdata<Creature>(L, target);
+		LuaScriptInterface::setCreatureMetatable(L, -1, target);
+	} else {
+		lua_pushnil(L);
+	}
+
+	int size0 = lua_gettop(L);
+	bool result = true;
+
+	if (lua_pcall(L, 2, 1 /*nReturnValues*/, 0) != 0) {
+		LuaScriptInterface::reportError(nullptr, LuaScriptInterface::popString(L));
+	}
+	result = LuaScriptInterface::getBoolean(L, -1);
+	lua_pop(L, 1);
+
+	if ((lua_gettop(L) + 2 /*nParams*/ + 1) != size0) {
+		LuaScriptInterface::reportError(nullptr, "Stack size changed!");
+	}
+
+	scriptInterface->resetScriptEnv();
+	return result;
 }
 
 //**********************************************************//

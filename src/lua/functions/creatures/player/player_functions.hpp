@@ -88,6 +88,12 @@ class PlayerFunctions final : LuaScriptInterface {
 			registerMethod(L, "Player", "removeExperience", PlayerFunctions::luaPlayerRemoveExperience);
 			registerMethod(L, "Player", "getLevel", PlayerFunctions::luaPlayerGetLevel);
 
+			registerMethod(L, "Player", "getMagicShieldCapacityFlat", PlayerFunctions::luaPlayerGetMagicShieldCapacityFlat);
+			registerMethod(L, "Player", "getMagicShieldCapacityPercent", PlayerFunctions::luaPlayerGetMagicShieldCapacityPercent);
+
+			registerMethod(L, "Player", "sendSpellCooldown", PlayerFunctions::luaPlayerSendSpellCooldown);
+			registerMethod(L, "Player", "sendSpellGroupCooldown", PlayerFunctions::luaPlayerSendSpellGroupCooldown);
+
 			registerMethod(L, "Player", "getMagicLevel", PlayerFunctions::luaPlayerGetMagicLevel);
 			registerMethod(L, "Player", "getBaseMagicLevel", PlayerFunctions::luaPlayerGetBaseMagicLevel);
 			registerMethod(L, "Player", "getMana", PlayerFunctions::luaPlayerGetMana);
@@ -159,6 +165,9 @@ class PlayerFunctions final : LuaScriptInterface {
 
 			registerMethod(L, "Player", "getStorageValue", PlayerFunctions::luaPlayerGetStorageValue);
 			registerMethod(L, "Player", "setStorageValue", PlayerFunctions::luaPlayerSetStorageValue);
+
+			registerMethod(L, "Player", "getStorageValueByName", PlayerFunctions::luaPlayerGetStorageValueByName);
+			registerMethod(L, "Player", "setStorageValueByName", PlayerFunctions::luaPlayerSetStorageValueByName);
 
 			registerMethod(L, "Player", "addItem", PlayerFunctions::luaPlayerAddItem);
 			registerMethod(L, "Player", "addItemEx", PlayerFunctions::luaPlayerAddItemEx);
@@ -272,7 +281,7 @@ class PlayerFunctions final : LuaScriptInterface {
 			registerMethod(L, "Player", "openMarket", PlayerFunctions::luaPlayerOpenMarket);
 
 			registerMethod(L, "Player", "instantSkillWOD", PlayerFunctions::luaPlayerInstantSkillWOD);
-			registerMethod(L, "Player", "upgradeSpellsWORD", PlayerFunctions::luaPlayerUpgradeSpellWOD);
+			registerMethod(L, "Player", "upgradeSpellsWOD", PlayerFunctions::luaPlayerUpgradeSpellWOD);
 			registerMethod(L, "Player", "reloadData", PlayerFunctions::luaPlayerReloadData);
 			registerMethod(L, "Player", "onThinkWheelOfDestiny", PlayerFunctions::luaPlayerOnThinkWheelOfDestiny);
 			registerMethod(L, "Player", "avatarTimer", PlayerFunctions::luaPlayerAvatarTimer);
@@ -329,6 +338,9 @@ class PlayerFunctions final : LuaScriptInterface {
 
 			registerMethod(L, "Player", "updateConcoction", PlayerFunctions::luaPlayerUpdateConcoction);
 			registerMethod(L, "Player", "clearSpellCooldowns", PlayerFunctions::luaPlayerClearSpellCooldowns);
+
+			registerMethod(L, "Player", "isVip", PlayerFunctions::luaPlayerIsVip);
+			registerMethod(L, "Player", "getVipDays", PlayerFunctions::luaPlayerGetVipDays);
 
 			GroupFunctions::init(L);
 			GuildFunctions::init(L);
@@ -404,6 +416,12 @@ class PlayerFunctions final : LuaScriptInterface {
 		static int luaPlayerRemoveExperience(lua_State* L);
 		static int luaPlayerGetLevel(lua_State* L);
 
+		static int luaPlayerGetMagicShieldCapacityFlat(lua_State* L);
+		static int luaPlayerGetMagicShieldCapacityPercent(lua_State* L);
+
+		static int luaPlayerSendSpellCooldown(lua_State* L);
+		static int luaPlayerSendSpellGroupCooldown(lua_State* L);
+
 		static int luaPlayerGetMagicLevel(lua_State* L);
 		static int luaPlayerGetBaseMagicLevel(lua_State* L);
 		static int luaPlayerGetMana(lua_State* L);
@@ -476,6 +494,8 @@ class PlayerFunctions final : LuaScriptInterface {
 
 		static int luaPlayerGetStorageValue(lua_State* L);
 		static int luaPlayerSetStorageValue(lua_State* L);
+		static int luaPlayerGetStorageValueByName(lua_State* L);
+		static int luaPlayerSetStorageValueByName(lua_State* L);
 
 		static int luaPlayerAddItem(lua_State* L);
 		static int luaPlayerAddItemEx(lua_State* L);
@@ -653,6 +673,9 @@ class PlayerFunctions final : LuaScriptInterface {
 		// Concoction system
 		static int luaPlayerUpdateConcoction(lua_State* L);
 		static int luaPlayerClearSpellCooldowns(lua_State* L);
+
+		static int luaPlayerIsVip(lua_State* L);
+		static int luaPlayerGetVipDays(lua_State* L);
 
 		friend class CreatureFunctions;
 };

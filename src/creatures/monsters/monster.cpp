@@ -15,6 +15,8 @@
 #include "game/game.h"
 #include "game/scheduling/tasks.h"
 #include "lua/creature/events.h"
+#include "lua/callbacks/event_callback.hpp"
+#include "lua/callbacks/events_callbacks.hpp"
 
 int32_t Monster::despawnRange;
 int32_t Monster::despawnRadius;
@@ -36,10 +38,9 @@ Monster::Monster(MonsterType* mType) :
 	defaultOutfit = mType->info.outfit;
 	currentOutfit = mType->info.outfit;
 	skull = mType->info.skull;
-	float multiplier = g_configManager().getFloat(RATE_MONSTER_HEALTH);
-	health = mType->info.health * multiplier;
-	healthMax = mType->info.healthMax * multiplier;
-	runAwayHealth = mType->info.runAwayHealth * multiplier;
+	health = mType->info.health * mType->getHealthMultiplier();
+	healthMax = mType->info.healthMax * mType->getHealthMultiplier();
+	runAwayHealth = mType->info.runAwayHealth * mType->getHealthMultiplier();
 	baseSpeed = mType->getBaseSpeed();
 	internalLight = mType->info.light;
 	hiddenHealth = mType->info.hiddenHealth;
@@ -48,9 +49,9 @@ Monster::Monster(MonsterType* mType) :
 	// Register creature events
 	for (const std::string &scriptName : mType->info.scripts) {
 		if (!registerCreatureEvent(scriptName)) {
-			SPDLOG_WARN("[Monster::Monster] - "
-						"Unknown event name: {}",
-						scriptName);
+			g_logger().warn("[Monster::Monster] - "
+							"Unknown event name: {}",
+							scriptName);
 		}
 	}
 }
@@ -81,12 +82,13 @@ bool Monster::canWalkOnFieldType(CombatType_t combatType) const {
 	}
 }
 
-uint32_t Monster::getReflectValue(CombatType_t reflectType) const {
+int32_t Monster::getReflectPercent(CombatType_t reflectType, bool useCharges) const {
+	int32_t result = Creature::getReflectPercent(reflectType, useCharges);
 	auto it = mType->info.reflectMap.find(reflectType);
 	if (it != mType->info.reflectMap.end()) {
-		return it->second;
+		result += it->second;
 	}
-	return 0;
+	return result;
 }
 
 uint32_t Monster::getHealingCombatValue(CombatType_t healingType) const {
@@ -109,9 +111,9 @@ void Monster::onCreatureAppear(Creature* creature, bool isLogin) {
 		// onCreatureAppear(self, creature)
 		LuaScriptInterface* scriptInterface = mType->info.scriptInterface;
 		if (!scriptInterface->reserveScriptEnv()) {
-			SPDLOG_ERROR("[Monster::onCreatureAppear - Monster {} creature {}] "
-						 "Call stack overflow. Too many lua script calls being nested.",
-						 getName(), creature->getName());
+			g_logger().error("[Monster::onCreatureAppear - Monster {} creature {}] "
+							 "Call stack overflow. Too many lua script calls being nested.",
+							 getName(), creature->getName());
 			return;
 		}
 
@@ -147,9 +149,9 @@ void Monster::onRemoveCreature(Creature* creature, bool isLogout) {
 		// onCreatureDisappear(self, creature)
 		LuaScriptInterface* scriptInterface = mType->info.scriptInterface;
 		if (!scriptInterface->reserveScriptEnv()) {
-			SPDLOG_ERROR("[Monster::onCreatureDisappear - Monster {} creature {}] "
-						 "Call stack overflow. Too many lua script calls being nested.",
-						 getName(), creature->getName());
+			g_logger().error("[Monster::onCreatureDisappear - Monster {} creature {}] "
+							 "Call stack overflow. Too many lua script calls being nested.",
+							 getName(), creature->getName());
 			return;
 		}
 
@@ -188,9 +190,9 @@ void Monster::onCreatureMove(Creature* creature, const Tile* newTile, const Posi
 		// onCreatureMove(self, creature, oldPosition, newPosition)
 		LuaScriptInterface* scriptInterface = mType->info.scriptInterface;
 		if (!scriptInterface->reserveScriptEnv()) {
-			SPDLOG_ERROR("[Monster::onCreatureMove - Monster {} creature {}] "
-						 "Call stack overflow. Too many lua script calls being nested.",
-						 getName(), creature->getName());
+			g_logger().error("[Monster::onCreatureMove - Monster {} creature {}] "
+							 "Call stack overflow. Too many lua script calls being nested.",
+							 getName(), creature->getName());
 			return;
 		}
 
@@ -263,9 +265,9 @@ void Monster::onCreatureSay(Creature* creature, SpeakClasses type, const std::st
 		// onCreatureSay(self, creature, type, message)
 		LuaScriptInterface* scriptInterface = mType->info.scriptInterface;
 		if (!scriptInterface->reserveScriptEnv()) {
-			SPDLOG_ERROR("Monster {} creature {}] Call stack overflow. Too many lua "
-						 "script calls being nested.",
-						 getName(), creature->getName());
+			g_logger().error("Monster {} creature {}] Call stack overflow. Too many lua "
+							 "script calls being nested.",
+							 getName(), creature->getName());
 			return;
 		}
 
@@ -732,9 +734,9 @@ void Monster::onThink(uint32_t interval) {
 		// onThink(self, interval)
 		LuaScriptInterface* scriptInterface = mType->info.scriptInterface;
 		if (!scriptInterface->reserveScriptEnv()) {
-			SPDLOG_ERROR("Monster {} Call stack overflow. Too many lua script calls "
-						 "being nested.",
-						 getName());
+			g_logger().error("Monster {} Call stack overflow. Too many lua script calls "
+							 "being nested.",
+							 getName());
 			return;
 		}
 
@@ -847,9 +849,9 @@ void Monster::doAttacking(uint32_t interval) {
 
 				float multiplier;
 				if (maxCombatValue > 0) { // Defense
-					multiplier = g_configManager().getFloat(RATE_MONSTER_DEFENSE);
+					multiplier = mType->getDefenseMultiplier();
 				} else { // Attack
-					multiplier = g_configManager().getFloat(RATE_MONSTER_ATTACK);
+					multiplier = mType->getAttackMultiplier();
 				}
 
 				minCombatValue = spellBlock.minCombatValue * multiplier;
@@ -940,17 +942,18 @@ void Monster::onThinkTarget(uint32_t interval) {
 
 			if (challengeFocusDuration > 0) {
 				challengeFocusDuration -= interval;
+				canChangeTarget = false;
 
 				if (challengeFocusDuration <= 0) {
 					challengeFocusDuration = 0;
 				}
 			}
 
-			if (targetChangeCooldown > 0) {
-				targetChangeCooldown -= interval;
+			if (m_targetChangeCooldown > 0) {
+				m_targetChangeCooldown -= interval;
 
-				if (targetChangeCooldown <= 0) {
-					targetChangeCooldown = 0;
+				if (m_targetChangeCooldown <= 0) {
+					m_targetChangeCooldown = 0;
 					targetChangeTicks = mType->info.changeTargetSpeed;
 				} else {
 					canChangeTarget = false;
@@ -962,14 +965,18 @@ void Monster::onThinkTarget(uint32_t interval) {
 
 				if (targetChangeTicks >= mType->info.changeTargetSpeed) {
 					targetChangeTicks = 0;
-					targetChangeCooldown = mType->info.changeTargetSpeed;
+					m_targetChangeCooldown = mType->info.changeTargetSpeed;
 
 					if (challengeFocusDuration > 0) {
 						challengeFocusDuration = 0;
 					}
 
 					if (mType->info.changeTargetChance >= uniform_random(1, 100)) {
-						searchTarget(TARGETSEARCH_DEFAULT);
+						if (mType->info.targetDistance <= 1) {
+							searchTarget(TARGETSEARCH_RANDOM);
+						} else {
+							searchTarget(TARGETSEARCH_NEAREST);
+						}
 					}
 				}
 			}
@@ -1916,9 +1923,9 @@ bool Monster::getCombatValues(int32_t &min, int32_t &max) {
 
 	float multiplier;
 	if (maxCombatValue > 0) { // Defense
-		multiplier = g_configManager().getFloat(RATE_MONSTER_DEFENSE);
+		multiplier = mType->getDefenseMultiplier();
 	} else { // Attack
-		multiplier = g_configManager().getFloat(RATE_MONSTER_ATTACK);
+		multiplier = mType->getAttackMultiplier();
 	}
 
 	min = minCombatValue * multiplier;
@@ -2000,6 +2007,7 @@ void Monster::dropLoot(Container* corpse, Creature*) {
 			}
 		}
 		g_events().eventMonsterOnDropLoot(this, corpse);
+		g_callbacks().executeCallback(EventCallback_t::monsterOnDropLoot, &EventCallback::monsterOnDropLoot, this, corpse);
 	}
 }
 
@@ -2031,14 +2039,13 @@ void Monster::changeHealth(int32_t healthChange, bool sendHealthChange /* = true
 	Creature::changeHealth(healthChange, sendHealthChange);
 }
 
-bool Monster::challengeCreature(Creature* creature) {
+bool Monster::challengeCreature(Creature* creature, int targetChangeCooldown) {
 	if (isSummon()) {
 		return false;
 	}
 
 	bool result = selectTarget(creature);
 	if (result) {
-		targetChangeCooldown = 6000;
 		challengeFocusDuration = targetChangeCooldown;
 		targetChangeTicks = 0;
 		// Wheel of destiny
@@ -2139,9 +2146,8 @@ void Monster::clearFiendishStatus() {
 	forgeStack = 0;
 	monsterForgeClassification = ForgeClassifications_t::FORGE_NORMAL_MONSTER;
 
-	float multiplier = g_configManager().getFloat(RATE_MONSTER_HEALTH);
-	health = mType->info.health * static_cast<int32_t>(multiplier);
-	healthMax = mType->info.healthMax * static_cast<int32_t>(multiplier);
+	health = mType->info.health * mType->getHealthMultiplier();
+	healthMax = mType->info.healthMax * mType->getHealthMultiplier();
 
 	// Set icon
 	setMonsterIcon(0, CREATUREICON_NONE);

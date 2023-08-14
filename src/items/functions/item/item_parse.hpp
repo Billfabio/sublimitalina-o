@@ -85,8 +85,9 @@ const phmap::flat_hash_map<std::string, ItemParseAttributes_t> ItemParseAttribut
 	{ "maxhitpointspercent", ITEM_PARSE_MAXHITPOINTSPERCENT },
 	{ "maxmanapoints", ITEM_PARSE_MAXMANAPOINTS },
 	{ "maxmanapointspercent", ITEM_PARSE_MAXMANAPOINTSPERCENT },
-	{ "magicpoints", ITEM_PARSE_MAGICPOINTS },
-	{ "magicpointspercent", ITEM_PARSE_MAGICPOINTSPERCENT },
+	{ "magiclevelpoints", ITEM_PARSE_MAGICLEVELPOINTS },
+	{ "magicpoints", ITEM_PARSE_MAGICLEVELPOINTS },
+	{ "magicpointspercent", ITEM_PARSE_MAGICLEVELPOINTSPERCENT },
 	{ "fieldabsorbpercentenergy", ITEM_PARSE_FIELDABSORBPERCENTENERGY },
 	{ "fieldabsorbpercentfire", ITEM_PARSE_FIELDABSORBPERCENTFIRE },
 	{ "fieldabsorbpercentpoison", ITEM_PARSE_FIELDABSORBPERCENTPOISON },
@@ -124,7 +125,9 @@ const phmap::flat_hash_map<std::string, ItemParseAttributes_t> ItemParseAttribut
 	{ "malesleeper", ITEM_PARSE_MALETRANSFORMTO },
 	{ "femaletransformto", ITEM_PARSE_FEMALETRANSFORMTO },
 	{ "femalesleeper", ITEM_PARSE_FEMALETRANSFORMTO },
-	{ "transformto", ITEM_PARSE_TRANSFORMTO },
+	{ "bedpart", ITEM_PARSE_PARTNERDIRECTION },
+	{ "bedpartof", ITEM_PARSE_PARTNERDIRECTION },
+	{ "transformonuse", ITEM_PARSE_TRANSFORMONUSE },
 	{ "destroyto", ITEM_PARSE_DESTROYTO },
 	{ "elementice", ITEM_PARSE_ELEMENTICE },
 	{ "elementearth", ITEM_PARSE_ELEMENTEARTH },
@@ -136,7 +139,23 @@ const phmap::flat_hash_map<std::string, ItemParseAttributes_t> ItemParseAttribut
 	{ "blocking", ITEM_PARSE_BLOCK_SOLID },
 	{ "allowdistread", ITEM_PARSE_ALLOWDISTREAD },
 	{ "imbuementslot", ITEM_PARSE_IMBUEMENT },
-	{ "stacksize", ITEM_PARSE_STACKSIZE }
+	{ "stacksize", ITEM_PARSE_STACKSIZE },
+	// 12.72 modifiers
+	{ "deathmagiclevelpoints", ITEM_PARSE_DEATHMAGICLEVELPOINTS },
+	{ "energymagiclevelpoints", ITEM_PARSE_ENERGYMAGICLEVELPOINTS },
+	{ "earthmagiclevelpoints", ITEM_PARSE_EARTHMAGICLEVELPOINTS },
+	{ "firemagiclevelpoints", ITEM_PARSE_EARTHMAGICLEVELPOINTS },
+	{ "icemagiclevelpoints", ITEM_PARSE_ICEMAGICLEVELPOINTS },
+	{ "holymagiclevelpoints", ITEM_PARSE_HOLYMAGICLEVELPOINTS },
+	{ "healingmagiclevelpoints", ITEM_PARSE_HEALINGMAGICLEVELPOINTS },
+	{ "physicalmagiclevelpoints", ITEM_PARSE_PHYSICALMAGICLEVELPOINTS },
+	{ "magicshieldcapacitypercent", ITEM_PARSE_MAGICSHIELDCAPACITYPERCENT },
+	{ "magicshieldcapacityflat", ITEM_PARSE_MAGICSHIELDCAPACITYFLAT },
+	{ "perfectshotdamage", ITEM_PARSE_PERFECTSHOTDAMAGE },
+	{ "perfectshotrange", ITEM_PARSE_PERFECTSHOTRANGE },
+	{ "cleavepercent", ITEM_PARSE_CLEAVEPERCENT },
+	{ "reflectdamage", ITEM_PARSE_REFLECTDAMAGE },
+	{ "reflectpercentall", ITEM_PARSE_REFLECTPERCENTALL },
 };
 
 const phmap::flat_hash_map<std::string, ItemTypes_t> ItemTypesMap = {
@@ -157,6 +176,9 @@ const phmap::flat_hash_map<std::string, ItemTypes_t> ItemTypesMap = {
 	{ "food", ITEM_TYPE_FOOD },
 	{ "valuable", ITEM_TYPE_VALUABLE },
 	{ "potion", ITEM_TYPE_POTION },
+
+	{ "ladder", ITEM_TYPE_LADDER },
+	{ "dummy", ITEM_TYPE_DUMMY },
 };
 
 const phmap::flat_hash_map<std::string, TileFlags_t> TileStatesMap = {
@@ -227,8 +249,9 @@ class ItemParse : public Items {
 	public:
 		static void initParse(const std::string &tmpStrValue, pugi::xml_node attributeNode, pugi::xml_attribute valueAttribute, ItemType &itemType);
 
-	protected:
-		static void parseType(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+	private:
+		static void parseDummyRate(pugi::xml_node attributeNode, ItemType &itemType);
+		static void parseType(const std::string &tmpStrValue, pugi::xml_node attributeNode, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseDescription(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseRuneSpellName(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseWeight(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
@@ -267,7 +290,7 @@ class ItemParse : public Items {
 		static void parseCriticalHit(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseLifeAndManaLeech(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseMaxHitAndManaPoints(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
-		static void parseMagicPoints(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+		static void parseMagicLevelPoint(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseFieldAbsorbPercent(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseAbsorbPercent(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseSupressDrunk(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
@@ -280,6 +303,12 @@ class ItemParse : public Items {
 		static void parseAllowDistanceRead(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseImbuement(const std::string &tmpStrValue, pugi::xml_node attributeNode, pugi::xml_attribute valueAttribute, ItemType &itemType);
 		static void parseStackSize(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+		static void parseSpecializedMagicLevelPoint(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+		static void parseMagicShieldCapacity(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+		static void parsePerfecShot(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+		static void parseCleavePercent(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+		static void parseReflectDamage(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+		static void parseTransformOnUse(const std::string_view &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 
 	private:
 		// Parent of the function: static void parseField

@@ -90,15 +90,10 @@ void ProtocolLogin::getCharacterList(const std::string &accountIdentifier, const
 
 	// Add premium days
 	output->addByte(0);
-	if (g_configManager().getBoolean(FREE_PREMIUM)) {
-		output->addByte(1);
-		output->add<uint32_t>(0);
-	} else {
-		uint32_t days;
-		account.GetPremiumRemaningDays(&days);
-		output->addByte(0);
-		output->add<uint32_t>(time(nullptr) + (days * 86400));
-	}
+	uint32_t days;
+	account.GetPremiumRemaningDays(&days);
+	output->addByte(0);
+	output->add<uint32_t>(time(nullptr) + (days * 86400));
 
 	send(output);
 
@@ -127,7 +122,7 @@ void ProtocolLogin::onRecvFirstMessage(NetworkMessage &msg) {
 	 */
 
 	if (!Protocol::RSA_decrypt(msg)) {
-		SPDLOG_WARN("[ProtocolLogin::onRecvFirstMessage] - RSA Decrypt Failed");
+		g_logger().warn("[ProtocolLogin::onRecvFirstMessage] - RSA Decrypt Failed");
 		disconnect();
 		return;
 	}
