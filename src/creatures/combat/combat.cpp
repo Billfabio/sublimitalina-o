@@ -19,7 +19,7 @@
 #include "creatures/monsters/monsters.h"
 #include "items/weapons/weapons.h"
 
-int32_t Combat::getLevelFormula(const Player* player, const Spell* wheelSpell, const CombatDamage &damage) const {
+int32_t Combat::getLevelFormula(const Player* player, const std::shared_ptr<Spell> &wheelSpell, const CombatDamage &damage) const {
 	if (!player) {
 		return 0;
 	}
@@ -46,7 +46,7 @@ CombatDamage Combat::getCombatDamage(Creature* creature, Creature* target) const
 	damage.instantSpellName = instantSpellName;
 	damage.runeSpellName = runeSpellName;
 	// Wheel of destiny
-	const Spell* wheelSpell = nullptr;
+	std::shared_ptr<Spell> wheelSpell = nullptr;
 	Player* attackerPlayer = creature ? creature->getPlayer() : nullptr;
 	if (attackerPlayer) {
 		wheelSpell = attackerPlayer->wheel()->getCombatDataSpell(damage);
@@ -107,12 +107,7 @@ void Combat::getCombatArea(const Position &centerPos, const Position &targetPos,
 	if (area) {
 		area->getList(centerPos, targetPos, list);
 	} else {
-		Tile* tile = g_game().map.getTile(targetPos);
-		if (!tile) {
-			tile = new StaticTile(targetPos.x, targetPos.y, targetPos.z);
-			g_game().map.setTile(targetPos, tile);
-		}
-		list.push_front(tile);
+		list.push_front(g_game().map.getOrCreateTile(targetPos));
 	}
 }
 
@@ -199,21 +194,21 @@ ReturnValue Combat::canTargetCreature(Player* player, Creature* target) {
 
 	if (!player->hasFlag(PlayerFlags_t::IgnoreProtectionZone)) {
 		// pz-zone
-		if (player->getZone() == ZONE_PROTECTION) {
+		if (player->getZoneType() == ZONE_PROTECTION) {
 			return RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
 		}
 
-		if (target->getZone() == ZONE_PROTECTION) {
+		if (target->getZoneType() == ZONE_PROTECTION) {
 			return RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
 		}
 
 		// nopvp-zone
 		if (isPlayerCombat(target)) {
-			if (player->getZone() == ZONE_NOPVP) {
+			if (player->getZoneType() == ZONE_NOPVP) {
 				return RETURNVALUE_ACTIONNOTPERMITTEDINANOPVPZONE;
 			}
 
-			if (target->getZone() == ZONE_NOPVP) {
+			if (target->getZoneType() == ZONE_NOPVP) {
 				return RETURNVALUE_YOUMAYNOTATTACKAPERSONINPROTECTIONZONE;
 			}
 		}
@@ -276,7 +271,7 @@ ReturnValue Combat::canDoCombat(Creature* caster, Tile* tile, bool aggressive) {
 }
 
 bool Combat::isInPvpZone(const Creature* attacker, const Creature* target) {
-	return attacker->getZone() == ZONE_PVP && target->getZone() == ZONE_PVP;
+	return attacker->getZoneType() == ZONE_PVP && target->getZoneType() == ZONE_PVP;
 }
 
 bool Combat::isProtected(const Player* attacker, const Player* target) {
@@ -313,7 +308,7 @@ ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target, bool aggre
 
 	if (attacker) {
 		const Creature* attackerMaster = attacker->getMaster();
-		auto targetPlayer = target->getPlayer() ? target->getPlayer() : nullptr;
+		auto targetPlayer = target ? target->getPlayer() : nullptr;
 		if (targetPlayer) {
 			if (targetPlayer->hasFlag(PlayerFlags_t::CannotBeAttacked)) {
 				return RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER;
@@ -374,7 +369,7 @@ ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target, bool aggre
 					return RETURNVALUE_YOUMAYNOTATTACKTHISCREATURE;
 				}
 
-				if (target->isSummon() && target->getMaster()->getPlayer() && target->getZone() == ZONE_NOPVP) {
+				if (target->isSummon() && target->getMaster()->getPlayer() && target->getZoneType() == ZONE_NOPVP) {
 					return RETURNVALUE_ACTIONNOTPERMITTEDINANOPVPZONE;
 				}
 			} else if (attacker->getMonster()) {
@@ -392,13 +387,13 @@ ReturnValue Combat::canDoCombat(Creature* attacker, Creature* target, bool aggre
 
 		if (g_game().getWorldType() == WORLD_TYPE_NO_PVP) {
 			if (attacker->getPlayer() || (attackerMaster && attackerMaster->getPlayer())) {
-				if (target->getPlayer()) {
+				if (targetPlayer) {
 					if (!isInPvpZone(attacker, target)) {
 						return RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER;
 					}
 				}
 
-				if (target->isSummon() && target->getMaster()->getPlayer()) {
+				if (target && target->isSummon() && target->getMaster()->getPlayer()) {
 					if (!isInPvpZone(attacker, target)) {
 						return RETURNVALUE_YOUMAYNOTATTACKTHISCREATURE;
 					}
@@ -713,9 +708,9 @@ void Combat::CombatConditionFunc(Creature* caster, Creature* target, const Comba
 			} else if (caster && caster->getMonster()) {
 				uint16_t playerCharmRaceid = player->parseRacebyCharm(CHARM_CLEANSE, false, 0);
 				if (playerCharmRaceid != 0) {
-					const MonsterType* mType = g_monsters().getMonsterType(caster->getName());
+					const auto &mType = g_monsters().getMonsterType(caster->getName());
 					if (mType && playerCharmRaceid == mType->info.raceid) {
-						Charm* charm = g_iobestiary().getBestiaryCharm(CHARM_CLEANSE);
+						const auto &charm = g_iobestiary().getBestiaryCharm(CHARM_CLEANSE);
 						if (charm && (charm->chance > normal_random(0, 100))) {
 							if (player->hasCondition(condition->getType())) {
 								player->removeCondition(condition->getType());
@@ -1019,8 +1014,8 @@ void Combat::CombatFunc(Creature* caster, const Position &origin, const Position
 		}
 	}
 
-	const int32_t rangeX = maxX + Map::maxViewportX;
-	const int32_t rangeY = maxY + Map::maxViewportY;
+	const int32_t rangeX = maxX + MAP_MAX_VIEW_PORT_X;
+	const int32_t rangeY = maxY + MAP_MAX_VIEW_PORT_Y;
 	g_game().map.getSpectators(spectators, pos, true, true, rangeX, rangeX, rangeY, rangeY);
 
 	int affected = 0;
@@ -1148,9 +1143,9 @@ void Combat::doCombatHealth(Creature* caster, Creature* target, const Position &
 		if (target && target->getMonster() && damage.primary.type != COMBAT_HEALING) {
 			uint16_t playerCharmRaceid = caster->getPlayer()->parseRacebyCharm(CHARM_LOW, false, 0);
 			if (playerCharmRaceid != 0) {
-				const MonsterType* mType = g_monsters().getMonsterType(target->getName());
+				const auto &mType = g_monsters().getMonsterType(target->getName());
 				if (mType && playerCharmRaceid == mType->info.raceid) {
-					Charm* charm = g_iobestiary().getBestiaryCharm(CHARM_LOW);
+					const auto &charm = g_iobestiary().getBestiaryCharm(CHARM_LOW);
 					if (charm) {
 						chance += charm->percent;
 						g_game().sendDoubleSoundEffect(target->getPosition(), charm->soundCastEffect, charm->soundImpactEffect, caster);
@@ -1438,9 +1433,9 @@ uint32_t ValueCallback::getMagicLevelSkill(const Player* player, const CombatDam
 	uint32_t magicLevelSkill = player->getMagicLevel();
 	// Wheel of destiny
 	if (player && player->wheel()->getInstant("Runic Mastery") && damage.instantSpellName.empty()) {
-		const Spell* spell = g_spells().getRuneSpellByName(damage.runeSpellName);
+		const std::shared_ptr<Spell> &spell = g_spells().getRuneSpellByName(damage.runeSpellName);
 		// Rune conjuring spell have the same name as the rune item spell.
-		const InstantSpell* conjuringSpell = g_spells().getInstantSpellByName(damage.runeSpellName);
+		const std::shared_ptr<InstantSpell> &conjuringSpell = g_spells().getInstantSpellByName(damage.runeSpellName);
 		if (spell && conjuringSpell && conjuringSpell != spell && normal_random(0, 100) <= 25) {
 			uint32_t castResult = conjuringSpell->canCast(player) ? 20 : 10;
 			magicLevelSkill += magicLevelSkill * castResult / 100;
@@ -1770,12 +1765,7 @@ void AreaCombat::getList(const Position &centerPos, const Position &targetPos, s
 	for (uint32_t y = 0, rows = area->getRows(); y < rows; ++y) {
 		for (uint32_t x = 0; x < cols; ++x) {
 			if (area->getValue(y, x) != 0 && g_game().isSightClear(targetPos, tmpPos, true)) {
-				Tile* tile = g_game().map.getTile(tmpPos);
-				if (!tile) {
-					tile = new StaticTile(tmpPos.x, tmpPos.y, tmpPos.z);
-					g_game().map.setTile(tmpPos, tile);
-				}
-				list.push_front(tile);
+				list.push_front(g_game().map.getOrCreateTile(tmpPos));
 			}
 			tmpPos.x++;
 		}

@@ -11,11 +11,11 @@
 #define SRC_DATABASE_DATABASETASKS_H_
 
 #include "database/database.h"
-#include "utils/thread_holder_base.h"
+#include "lib/thread/thread_pool.hpp"
 
-class DatabaseTasks : public ThreadHolder<DatabaseTasks> {
+class DatabaseTasks {
 	public:
-		DatabaseTasks();
+		DatabaseTasks(ThreadPool &threadPool, Database &db);
 
 		// Ensures that we don't accidentally copy it
 		DatabaseTasks(const DatabaseTasks &) = delete;
@@ -23,10 +23,13 @@ class DatabaseTasks : public ThreadHolder<DatabaseTasks> {
 
 		static DatabaseTasks &getInstance();
 
-		void addTask(std::string query, std::function<void(DBResult_ptr, bool)> callback = nullptr, bool store = false);
+		void execute(const std::string &query, std::function<void(DBResult_ptr, bool)> callback = nullptr);
+		void store(const std::string &query, std::function<void(DBResult_ptr, bool)> callback = nullptr);
 
 	private:
-		Database* db_;
+		Database &db;
+		ThreadPool &threadPool;
+		std::mutex threadSafetyMutex;
 };
 
 constexpr auto g_databaseTasks = DatabaseTasks::getInstance;

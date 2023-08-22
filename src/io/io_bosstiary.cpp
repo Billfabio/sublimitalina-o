@@ -51,7 +51,7 @@ void IOBosstiary::loadBoostedBoss() {
 	// Filter only archfoe bosses
 	phmap::btree_map<uint16_t, std::string> bossInfo;
 	for (auto [infoBossRaceId, infoBossName] : bossMap) {
-		const MonsterType* mType = getMonsterTypeByBossRaceId(infoBossRaceId);
+		const auto &mType = getMonsterTypeByBossRaceId(infoBossRaceId);
 		if (!mType || mType->info.bosstiaryRace != BosstiaryRarity_t::RARITY_ARCHFOE) {
 			continue;
 		}
@@ -83,7 +83,7 @@ void IOBosstiary::loadBoostedBoss() {
 	query << "UPDATE `boosted_boss` SET ";
 	query << "`date` = '" << today << "',";
 	query << "`boostname` = " << database.escapeString(bossName) << ",";
-	if (const MonsterType* bossType = getMonsterTypeByBossRaceId(bossId);
+	if (const auto &bossType = getMonsterTypeByBossRaceId(bossId);
 		bossType) {
 		query << "`looktypeEx` = " << static_cast<int>(bossType->info.outfit.lookTypeEx) << ",";
 		query << "`looktype` = " << static_cast<int>(bossType->info.outfit.lookType) << ",";
@@ -136,12 +136,12 @@ uint16_t IOBosstiary::getBoostedBossId() const {
 	return boostedBossId;
 }
 
-MonsterType* IOBosstiary::getMonsterTypeByBossRaceId(uint16_t raceId) const {
+std::shared_ptr<MonsterType> IOBosstiary::getMonsterTypeByBossRaceId(uint16_t raceId) const {
 	for ([[maybe_unused]] const auto &[bossRaceId, bossName] : getBosstiaryMap()) {
 		if (bossRaceId == raceId) {
-			MonsterType* monsterType = g_monsters().getMonsterType(bossName);
+			const auto &monsterType = g_monsters().getMonsterType(bossName);
 			if (!monsterType) {
-				g_logger().error("[{}] Boss with id not found in boss map", raceId);
+				g_logger().error("[{}] Boss with id {} not found in boss map", __FUNCTION__, raceId);
 				continue;
 			}
 
@@ -152,7 +152,7 @@ MonsterType* IOBosstiary::getMonsterTypeByBossRaceId(uint16_t raceId) const {
 	return nullptr;
 }
 
-void IOBosstiary::addBosstiaryKill(Player* player, const MonsterType* mtype, uint32_t amount /*= 1*/) const {
+void IOBosstiary::addBosstiaryKill(Player* player, const std::shared_ptr<MonsterType> &mtype, uint32_t amount /*= 1*/) const {
 	if (!player || !mtype) {
 		return;
 	}
@@ -217,8 +217,8 @@ uint32_t IOBosstiary::calculateBossPoints(uint16_t lootBonus) const {
 	return static_cast<uint32_t>((2.5 * lootBonus * lootBonus) - (477.5 * lootBonus) + 24000);
 }
 
-std::vector<uint16_t> IOBosstiary::getBosstiaryFinished(const Player* player, uint8_t level /* = 1*/) const {
-	std::vector<uint16_t> unlockedMonsters;
+phmap::parallel_flat_hash_set<uint16_t> IOBosstiary::getBosstiaryFinished(const Player* player, uint8_t level /* = 1*/) const {
+	phmap::parallel_flat_hash_set<uint16_t> unlockedMonsters;
 	if (!player) {
 		return unlockedMonsters;
 	}
@@ -230,7 +230,7 @@ std::vector<uint16_t> IOBosstiary::getBosstiaryFinished(const Player* player, ui
 			continue;
 		}
 
-		const MonsterType* mType = g_monsters().getMonsterType(bossName);
+		const auto &mType = g_monsters().getMonsterType(bossName);
 		if (!mType) {
 			continue;
 		}
@@ -241,7 +241,7 @@ std::vector<uint16_t> IOBosstiary::getBosstiaryFinished(const Player* player, ui
 			const std::vector<LevelInfo> &infoForCurrentRace = it->second;
 			auto levelKills = infoForCurrentRace.at(level - 1).kills;
 			if (bossKills >= levelKills) {
-				unlockedMonsters.push_back(bossId);
+				unlockedMonsters.insert(bossId);
 			}
 		} else {
 			g_logger().warn("[{}] boss with id {} and name {} not found in bossRace", __FUNCTION__, bossId, bossName);
@@ -295,7 +295,7 @@ std::vector<uint16_t> IOBosstiary::getBosstiaryCooldownRaceId(const Player* play
 		 const auto &[bossId, bossName] : bossesMap) {
 		uint32_t bossKills = player->getBestiaryKillCount(bossId);
 
-		const MonsterType* mType = g_monsters().getMonsterType(bossName);
+		const auto &mType = g_monsters().getMonsterType(bossName);
 		if (!mType) {
 			continue;
 		}
@@ -311,4 +311,14 @@ std::vector<uint16_t> IOBosstiary::getBosstiaryCooldownRaceId(const Player* play
 	}
 
 	return bossesCooldownRaceId;
+}
+
+const std::vector<LevelInfo> &IOBosstiary::getBossRaceKillStages(BosstiaryRarity_t race) const {
+	auto it = levelInfos.find(race);
+	if (it != levelInfos.end()) {
+		return it->second;
+	}
+
+	static std::vector<LevelInfo> emptyVector;
+	return emptyVector;
 }

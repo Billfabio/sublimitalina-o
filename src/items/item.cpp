@@ -120,7 +120,6 @@ bool Item::hasImbuementCategoryId(uint16_t categoryId) const {
 	for (uint8_t slotid = 0; slotid < getImbuementSlot(); slotid++) {
 		ImbuementInfo imbuementInfo;
 		if (getImbuementInfo(slotid, &imbuementInfo)) {
-
 			if (const CategoryImbuement* categoryImbuement = g_imbuements().getCategoryByID(imbuementInfo.imbuement->getCategory());
 				categoryImbuement->id == categoryId) {
 				return true;
@@ -2217,7 +2216,7 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, const
 
 	if (it.isRune()) {
 		if (it.runeLevel > 0 || it.runeMagLevel > 0) {
-			if (const RuneSpell* rune = g_spells().getRuneSpell(it.id)) {
+			if (const auto &rune = g_spells().getRuneSpell(it.id)) {
 				int32_t tmpSubType = subType;
 				if (item) {
 					tmpSubType = item->getSubType();
