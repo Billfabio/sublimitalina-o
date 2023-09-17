@@ -9,9 +9,9 @@
 
 #include "pch.hpp"
 
-#include "game/game.h"
-#include "creatures/creature.h"
-#include "creatures/npcs/npc.h"
+#include "game/game.hpp"
+#include "creatures/creature.hpp"
+#include "creatures/npcs/npc.hpp"
 #include "lua/functions/creatures/npc/npc_functions.hpp"
 
 int NpcFunctions::luaNpcCreate(lua_State* L) {
@@ -543,7 +543,7 @@ int NpcFunctions::luaNpcSellItem(lua_State* L) {
 			uint8_t internalAmount = (remainingAmount > internalCount) ? internalCount : static_cast<uint8_t>(remainingAmount);
 			const ItemType &iType = Item::items[itemId];
 			Item* item;
-			if (iType.isBed()) {
+			if (iType.isWrappable()) {
 				item = Item::CreateItem(ITEM_DECORATION_KIT, subType);
 				item->setAttribute(ItemAttribute_t::DESCRIPTION, "Unwrap this item in your own house to create a <" + iType.name + ">.");
 				item->setCustomAttribute("unWrapId", static_cast<int64_t>(itemId));
@@ -563,7 +563,7 @@ int NpcFunctions::luaNpcSellItem(lua_State* L) {
 				itemsPurchased += internalAmount;
 				remainingAmount -= internalAmount;
 				internalAmount = (remainingAmount > internalCount) ? internalCount : static_cast<uint8_t>(remainingAmount);
-				if (iType.isBed()) {
+				if (iType.isWrappable()) {
 					item = Item::CreateItem(ITEM_DECORATION_KIT, subType);
 					item->setAttribute(ItemAttribute_t::DESCRIPTION, "Unwrap this item in your own house to create a <" + iType.name + ">.");
 					item->setCustomAttribute("unWrapId", static_cast<int64_t>(itemId));
@@ -576,7 +576,7 @@ int NpcFunctions::luaNpcSellItem(lua_State* L) {
 		uint8_t internalAmount = (remainingAmount > internalCount) ? internalCount : static_cast<uint8_t>(remainingAmount);
 		const ItemType &iType = Item::items[itemId];
 		Item* item;
-		if (iType.isBed()) {
+		if (iType.isWrappable()) {
 			item = Item::CreateItem(ITEM_DECORATION_KIT, subType);
 			item->setAttribute(ItemAttribute_t::DESCRIPTION, "Unwrap this item in your own house to create a <" + iType.name + ">.");
 			item->setCustomAttribute("unWrapId", static_cast<int64_t>(itemId));
@@ -596,7 +596,7 @@ int NpcFunctions::luaNpcSellItem(lua_State* L) {
 			itemsPurchased += internalAmount;
 			remainingAmount -= internalAmount;
 			internalAmount = (remainingAmount > internalCount) ? internalCount : static_cast<uint8_t>(remainingAmount);
-			if (iType.isBed()) {
+			if (iType.isWrappable()) {
 				item = Item::CreateItem(ITEM_DECORATION_KIT, subType);
 				item->setAttribute(ItemAttribute_t::DESCRIPTION, "Unwrap this item in your own house to create a <" + iType.name + ">.");
 				item->setCustomAttribute("unWrapId", static_cast<int64_t>(itemId));

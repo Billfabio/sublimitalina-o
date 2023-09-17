@@ -6,45 +6,39 @@
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
  * Website: https://docs.opentibiabr.com/
  */
-
-#ifndef CANARY_SOFT_SINGLETON_H
-#define CANARY_SOFT_SINGLETON_H
+#pragma once
 
 #include <iostream>
+#include "lib/logging/log_with_spd_log.hpp"
 
-/**
- * This
- */
 class SoftSingleton {
-	public:
-		SoftSingleton(Logger &logger, std::string id);
+public:
+	explicit SoftSingleton(std::string id);
 
-		// non-copyable
-		SoftSingleton(const SoftSingleton &) = delete;
-		void operator=(const SoftSingleton &) = delete;
+	// non-copyable
+	SoftSingleton(const SoftSingleton &) = delete;
+	void operator=(const SoftSingleton &) = delete;
 
-		void increment();
+	void increment();
 
-		void decrement();
+	void decrement();
 
-	private:
-		Logger &logger;
-		std::string id;
-		int instance_count = 0;
+private:
+	Logger &logger = g_logger();
+	std::string id;
+	int instance_count = 0;
 };
 
 class SoftSingletonGuard {
-	public:
-		explicit SoftSingletonGuard(SoftSingleton &t);
+public:
+	explicit SoftSingletonGuard(SoftSingleton &t);
 
-		// non-copyable
-		SoftSingletonGuard(const SoftSingletonGuard &) = delete;
-		void operator=(const SoftSingletonGuard &) = delete;
+	// non-copyable
+	SoftSingletonGuard(const SoftSingletonGuard &) = delete;
+	void operator=(const SoftSingletonGuard &) = delete;
 
-		~SoftSingletonGuard();
+	~SoftSingletonGuard();
 
-	private:
-		SoftSingleton &tracker;
+private:
+	SoftSingleton &tracker;
 };
-
-#endif // CANARY_SOFT_SINGLETON_H

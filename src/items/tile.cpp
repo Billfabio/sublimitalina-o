@@ -9,18 +9,18 @@
 
 #include "pch.hpp"
 
-#include "items/tile.h"
-#include "creatures/creature.h"
-#include "creatures/combat/combat.h"
-#include "game/game.h"
+#include "items/tile.hpp"
+#include "creatures/creature.hpp"
+#include "creatures/combat/combat.hpp"
+#include "game/game.hpp"
 #include "game/zones/zone.hpp"
-#include "items/containers/mailbox/mailbox.h"
-#include "creatures/monsters/monster.h"
-#include "lua/creature/movement.h"
-#include "game/movement/teleport.h"
-#include "items/trashholder.h"
-#include "map/house/housetile.h"
-#include "io/iomap.h"
+#include "items/containers/mailbox/mailbox.hpp"
+#include "creatures/monsters/monster.hpp"
+#include "lua/creature/movement.hpp"
+#include "game/movement/teleport.hpp"
+#include "items/trashholder.hpp"
+#include "map/house/housetile.hpp"
+#include "io/iomap.hpp"
 
 StaticTile real_nullptr_tile(0xFFFF, 0xFFFF, 0xFF);
 Tile &Tile::nullptr_tile = real_nullptr_tile;
@@ -347,10 +347,6 @@ void Tile::onAddTileItem(Item* item) {
 
 	setTileFlags(item);
 
-	for (const auto zone : getZones()) {
-		zone->itemAdded(item);
-	}
-
 	const Position &cylinderMapPos = getPosition();
 
 	SpectatorHashSet spectators;
@@ -455,7 +451,6 @@ void Tile::onRemoveTileItem(const SpectatorHashSet &spectators, const std::vecto
 			it->second->removeThing(item, item->getItemCount());
 		}
 	}
-
 	for (const auto zone : getZones()) {
 		zone->itemRemoved(item);
 	}
@@ -931,8 +926,9 @@ void Tile::addThing(Thing* thing) {
 }
 
 void Tile::addThing(int32_t, Thing* thing) {
-	if (!thing)
+	if (!thing) {
 		return /*RETURNVALUE_NOTPOSSIBLE*/;
+	}
 
 	Creature* creature = thing->getCreature();
 	if (creature) {
@@ -1534,8 +1530,12 @@ void Tile::internalAddThing(Thing* thing) {
 }
 
 void Tile::internalAddThing(uint32_t, Thing* thing) {
-	if (!thing)
+	if (!thing) {
 		return;
+	}
+	for (const auto zone : getZones()) {
+		zone->thingAdded(thing);
+	}
 
 	thing->setParent(this);
 

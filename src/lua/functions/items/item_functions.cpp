@@ -11,9 +11,9 @@
 
 #include "lua/functions/items/item_functions.hpp"
 
-#include "game/game.h"
-#include "items/item.h"
-#include "items/decay/decay.h"
+#include "game/game.hpp"
+#include "items/item.hpp"
+#include "items/decay/decay.hpp"
 
 class Imbuement;
 
@@ -845,6 +845,20 @@ int ItemFunctions::luaItemIsInsideDepot(lua_State* L) {
 	}
 
 	pushBoolean(L, item->isInsideDepot(getBoolean(L, 2, false)));
+	return 1;
+}
+
+int ItemFunctions::luaItemIsContainer(lua_State* L) {
+	// item:isContainer()
+	const auto item = getUserdata<const Item>(L, 1);
+	if (!item) {
+		reportErrorFunc(getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
+		pushBoolean(L, false);
+		return 1;
+	}
+
+	const auto &it = Item::items[item->getID()];
+	pushBoolean(L, it.isContainer());
 	return 1;
 }
 

@@ -12,21 +12,21 @@
 #include "canary_server.hpp"
 
 #include "declarations.hpp"
-#include "creatures/players/grouping/familiars.h"
+#include "creatures/players/grouping/familiars.hpp"
 #include "creatures/players/storages/storages.hpp"
-#include "database/databasemanager.h"
-#include "game/game.h"
+#include "database/databasemanager.hpp"
+#include "game/game.hpp"
 #include "game/scheduling/dispatcher.hpp"
 #include "game/scheduling/events_scheduler.hpp"
-#include "io/iomarket.h"
+#include "io/iomarket.hpp"
 #include "lib/thread/thread_pool.hpp"
-#include "lua/creature/events.h"
-#include "lua/modules/modules.h"
+#include "lua/creature/events.hpp"
+#include "lua/modules/modules.hpp"
 #include "lua/scripts/lua_environment.hpp"
-#include "lua/scripts/scripts.h"
-#include "server/network/protocol/protocollogin.h"
-#include "server/network/webhook/webhook.h"
-#include "io/ioprey.h"
+#include "lua/scripts/scripts.hpp"
+#include "server/network/protocol/protocollogin.hpp"
+#include "server/network/webhook/webhook.hpp"
+#include "io/ioprey.hpp"
 #include "io/io_bosstiary.hpp"
 
 #include "core.hpp"
@@ -101,7 +101,8 @@ int CanaryServer::run() {
 
 			loaderSignal.notify_all();
 		}
-	});
+	},
+						   "CanaryServer::run");
 
 	loaderSignal.wait(loaderUniqueLock, [this] { return loaderDone || loadFailed; });
 
@@ -139,19 +140,16 @@ void CanaryServer::setWorldType() {
 	logger.debug("World type set as {}", asUpperCaseString(worldType));
 }
 
-void CanaryServer::loadMaps() {
-	logger.info("Loading main map...");
-	if (!g_game().loadMainMap(g_configManager().getString(MAP_NAME))) {
-		throw FailedToInitializeCanary("Failed to load main map");
-	}
+void CanaryServer::loadMaps() const {
+	try {
+		g_game().loadMainMap(g_configManager().getString(MAP_NAME));
 
-	// If "mapCustomEnabled" is true on config.lua, then load the custom map
-	if (g_configManager().getBoolean(TOGGLE_MAP_CUSTOM)) {
-		logger.debug("Loading custom maps...");
-		std::string customMapPath = g_configManager().getString(DATA_DIRECTORY) + "/world/custom/";
-		if (!g_game().loadCustomMaps(customMapPath)) {
-			throw FailedToInitializeCanary("Failed to load custom maps");
+		// If "mapCustomEnabled" is true on config.lua, then load the custom map
+		if (g_configManager().getBoolean(TOGGLE_MAP_CUSTOM)) {
+			g_game().loadCustomMaps(g_configManager().getString(DATA_DIRECTORY) + "/world/custom/");
 		}
+	} catch (const std::exception &err) {
+		throw FailedToInitializeCanary(err.what());
 	}
 }
 

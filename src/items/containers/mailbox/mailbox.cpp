@@ -9,9 +9,9 @@
 
 #include "pch.hpp"
 
-#include "items/containers/mailbox/mailbox.h"
-#include "game/game.h"
-#include "io/iologindata.h"
+#include "items/containers/mailbox/mailbox.hpp"
+#include "game/game.hpp"
+#include "io/iologindata.hpp"
 
 ReturnValue Mailbox::queryAdd(int32_t, const Thing &thing, uint32_t, uint32_t, Creature*) const {
 	const Item* item = thing.getItem();
@@ -39,8 +39,9 @@ void Mailbox::addThing(Thing* thing) {
 }
 
 void Mailbox::addThing(int32_t, Thing* thing) {
-	if (!thing)
+	if (!thing) {
 		return;
+	}
 
 	Item* item = thing->getItem();
 	if (item && Mailbox::canSend(item)) {
@@ -77,6 +78,16 @@ bool Mailbox::sendItem(Item* item) const {
 	/**No need to continue if its still empty**/
 	if (receiver.empty()) {
 		return false;
+	}
+
+	if (item && item->getContainer() && item->getTile()) {
+		SpectatorHashSet spectators;
+		g_game().map.getSpectators(spectators, item->getTile()->getPosition(), false, true);
+		for (Creature* spectator : spectators) {
+			if (spectator && spectator->getPlayer()) {
+				spectator->getPlayer()->autoCloseContainers(item->getContainer());
+			}
+		}
 	}
 
 	Player* player = g_game().getPlayerByName(receiver, true);

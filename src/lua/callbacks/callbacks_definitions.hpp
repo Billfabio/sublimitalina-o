@@ -7,8 +7,7 @@
  * Website: https://docs.opentibiabr.com/
  */
 
-#ifndef SRC_LUA_CALLBACKS_CALLBACKS_DEFINITIONS_HPP_
-#define SRC_LUA_CALLBACKS_CALLBACKS_DEFINITIONS_HPP_
+#pragma once
 
 /**
  * @enum EventCallback_t
@@ -64,8 +63,8 @@ enum class EventCallback_t : uint16_t {
 	// Npc
 	npcOnSpawn,
 	// Zone
-	zoneOnCreatureEnter,
-	zoneOnCreatureLeave,
+	zoneBeforeCreatureEnter,
+	zoneBeforeCreatureLeave,
+	zoneAfterCreatureEnter,
+	zoneAfterCreatureLeave,
 };
-
-#endif // SRC_LUA_CALLBACKS_CALLBACKS_DEFINITIONS_HPP_

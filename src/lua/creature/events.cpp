@@ -9,10 +9,10 @@
 
 #include "pch.hpp"
 
-#include "lua/creature/events.h"
-#include "utils/tools.h"
-#include "items/item.h"
-#include "creatures/players/player.h"
+#include "lua/creature/events.hpp"
+#include "utils/tools.hpp"
+#include "items/item.hpp"
+#include "creatures/players/player.hpp"
 
 Events::Events() :
 	scriptInterface("Event Interface") {
@@ -30,7 +30,7 @@ bool Events::loadFromXml() {
 
 	info = {};
 
-	phmap::btree_set<std::string> classes;
+	std::set<std::string> classes;
 	for (auto eventNode : doc.child("events").children()) {
 		if (!eventNode.attribute("enabled").as_bool()) {
 			continue;
@@ -1185,16 +1185,6 @@ void Events::eventPlayerOnCombat(Player* player, Creature* target, Item* item, C
 		if (damage.primary.type != COMBAT_HEALING) {
 			damage.primary.value = -damage.primary.value;
 			damage.secondary.value = -damage.secondary.value;
-		}
-		/*
-			Only EK with dealing physical damage will get elemental damage on skill
-		*/
-		if (damage.origin == ORIGIN_SPELL) {
-			if (player->getVocationId() != 4 && player->getVocationId() != 8) {
-				damage.primary.value = damage.primary.value + damage.secondary.value;
-				damage.secondary.type = COMBAT_NONE;
-				damage.secondary.value = 0;
-			}
 		}
 	}
 

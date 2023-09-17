@@ -9,13 +9,13 @@
 
 #include "pch.hpp"
 
-#include "creatures/interactions/chat.h"
-#include "game/game.h"
-#include "game/scheduling/scheduler.h"
+#include "creatures/interactions/chat.hpp"
+#include "game/game.hpp"
+#include "game/scheduling/scheduler.hpp"
 #include "lua/functions/core/game/global_functions.hpp"
 #include "lua/scripts/lua_environment.hpp"
 #include "lua/scripts/script_environment.hpp"
-#include "server/network/protocol/protocolstatus.h"
+#include "server/network/protocol/protocolstatus.hpp"
 #include "creatures/players/wheel/player_wheel.hpp"
 
 class Creature;
@@ -602,7 +602,7 @@ int GlobalFunctions::luaAddEvent(lua_State* L) {
 			lua_rawgeti(L, -1, 't');
 
 			LuaData_t type = getNumber<LuaData_t>(L, -1);
-			if (type != LuaData_t::Unknown && type != LuaData_t::Tile) {
+			if (type != LuaData_t::Unknown && type <= LuaData_t::Npc) {
 				indexes.push_back({ i, type });
 			}
 			lua_pop(globalState, 2);
@@ -681,7 +681,9 @@ int GlobalFunctions::luaAddEvent(lua_State* L) {
 
 	auto &lastTimerEventId = g_luaEnvironment().lastEventTimerId;
 	eventDesc.eventId = g_scheduler().addEvent(
-		delay, std::bind(&LuaEnvironment::executeTimerEvent, &g_luaEnvironment(), lastTimerEventId)
+		delay,
+		std::bind(&LuaEnvironment::executeTimerEvent, &g_luaEnvironment(), lastTimerEventId),
+		"LuaEnvironment::executeTimerEvent"
 	);
 
 	g_luaEnvironment().timerEvents.emplace(lastTimerEventId, std::move(eventDesc));
@@ -843,6 +845,13 @@ int GlobalFunctions::luaCreateTable(lua_State* L) {
 int GlobalFunctions::luaSystemTime(lua_State* L) {
 	// systemTime()
 	lua_pushnumber(L, OTSYS_TIME());
+	return 1;
+}
+
+int GlobalFunctions::luaGetFormattedTimeRemaining(lua_State* L) {
+	// getFormattedTimeRemaining(time)
+	time_t time = getNumber<uint32_t>(L, 1);
+	lua_pushstring(L, getFormattedTimeRemaining(time).c_str());
 	return 1;
 }
 
