@@ -675,7 +675,6 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage &msg) {
 		setChecksumMethod(CHECKSUM_METHOD_ADLER32);
 	} else if (operatingSystem <= CLIENTOS_OTCLIENT_MAC) {
 		setChecksumMethod(CHECKSUM_METHOD_SEQUENCE);
-		enableCompression();
 	}
 
 	clientVersion = static_cast<int32_t>(msg.get<uint32_t>());
@@ -4121,7 +4120,7 @@ void ProtocolGame::sendChannelsDialog() {
 
 	const ChannelList &list = g_chat().getChannelList(player);
 	msg.addByte(list.size());
-	for (ChatChannel* channel : list) {
+	for (const auto &channel : list) {
 		msg.add<uint16_t>(channel->getId());
 		msg.addString(channel->getName());
 	}
@@ -6040,11 +6039,7 @@ void ProtocolGame::sendAllowBugReport() {
 
 	NetworkMessage msg;
 	msg.addByte(0x1A);
-	if (player->getAccountType() >= account::ACCOUNT_TYPE_NORMAL) {
-		msg.addByte(0x01);
-	} else {
-		msg.addByte(0x00);
-	}
+	msg.addByte(0x00); // 0x01 = DISABLE bug report
 	writeToOutputBuffer(msg);
 }
 
