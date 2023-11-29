@@ -4,7 +4,6 @@ local config = {
 		position = Position(33443, 31545, 13),
 	},
 	requiredLevel = 250,
-
 	playerPositions = {
 		{ pos = Position(33485, 31546, 13), teleport = Position(33443, 31554, 13), effect = CONST_ME_TELEPORT },
 		{ pos = Position(33485, 31547, 13), teleport = Position(33443, 31554, 13), effect = CONST_ME_TELEPORT },
@@ -22,7 +21,6 @@ local config = {
 		to = Position(33453, 31555, 13),
 	},
 	exit = Position(32172, 31918, 8),
-	storage = Storage.Quest.U12_20.GraveDanger.Bosses.KingZelosTimer,
 }
 
 local lever = BossLever(config)

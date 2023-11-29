@@ -16,6 +16,7 @@
 #include "creatures/players/grouping/guild.hpp"
 #include "game/zones/zone.hpp"
 #include "game/game.hpp"
+#include "game/scheduling/dispatcher.hpp"
 #include "game/movement/teleport.hpp"
 #include "lua/functions/core/core_functions.hpp"
 #include "lua/functions/creatures/creature_functions.hpp"
@@ -90,6 +91,10 @@ std::string LuaFunctionsLoader::getErrorDesc(ErrorCode_t code) {
 }
 
 int LuaFunctionsLoader::protectedCall(lua_State* L, int nargs, int nresults) {
+	if (const int ret = validateDispatcherContext(__FUNCTION__); ret != 0) {
+		return ret;
+	}
+
 	int error_index = lua_gettop(L) - nargs;
 	lua_pushcfunction(L, luaErrorHandler);
 	lua_insert(L, error_index);
@@ -106,9 +111,35 @@ void LuaFunctionsLoader::reportError(const char* function, const std::string &er
 	LuaScriptInterface* scriptInterface;
 	getScriptEnv()->getEventInfo(scriptId, scriptInterface, callbackId, timerEvent);
 
-	g_logger().error("Lua script error: \nscriptInterface: [{}]\nscriptId: [{}]"
-					 "\ntimerEvent: [{}]\n callbackId:[{}]\nfunction: [{}]\nerror [{}]",
-					 scriptInterface ? scriptInterface->getInterfaceName() : "", scriptId ? scriptInterface->getFileById(scriptId) : "", timerEvent ? "in a timer event called from:" : "", callbackId ? scriptInterface->getFileById(callbackId) : "", function ? scriptInterface->getInterfaceName() : "", (stack_trace && scriptInterface) ? scriptInterface->getStackTrace(error_desc) : error_desc);
+	std::stringstream logMsg;
+	logMsg << "Lua Script Error Detected\n";
+	logMsg << "---------------------------------------\n";
+	if (scriptInterface) {
+		logMsg << "Interface: " << scriptInterface->getInterfaceName() << "\n";
+		if (scriptId) {
+			logMsg << "Script ID: " << scriptInterface->getFileById(scriptId) << "\n";
+		}
+		if (timerEvent) {
+			logMsg << "Timer Event: Yes\n";
+		}
+		if (callbackId) {
+			logMsg << "Callback ID: " << scriptInterface->getFileById(callbackId) << "\n";
+		}
+	}
+	if (function && strcmp(function, "N/A") != 0) {
+		logMsg << "Function: " << function << "\n";
+	}
+	logMsg << "Error Description: " << error_desc << "\n";
+	if (stack_trace && scriptInterface) {
+		std::string stackTrace = scriptInterface->getStackTrace(error_desc);
+		if (!stackTrace.empty() && stackTrace != "N/A") {
+			logMsg << "Stack Trace:\n"
+				   << stackTrace << "\n";
+		}
+	}
+	logMsg << "---------------------------------------\n";
+
+	g_logger().error(logMsg.str());
 }
 
 int LuaFunctionsLoader::luaErrorHandler(lua_State* L) {
@@ -120,6 +151,10 @@ int LuaFunctionsLoader::luaErrorHandler(lua_State* L) {
 }
 
 void LuaFunctionsLoader::pushVariant(lua_State* L, const LuaVariant &var) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_createtable(L, 0, 4);
 	setField(L, "type", var.type);
 	switch (var.type) {
@@ -144,6 +179,10 @@ void LuaFunctionsLoader::pushVariant(lua_State* L, const LuaVariant &var) {
 }
 
 void LuaFunctionsLoader::pushThing(lua_State* L, std::shared_ptr<Thing> thing) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	if (!thing) {
 		lua_createtable(L, 0, 4);
 		setField(L, "uid", 0);
@@ -165,6 +204,10 @@ void LuaFunctionsLoader::pushThing(lua_State* L, std::shared_ptr<Thing> thing) {
 }
 
 void LuaFunctionsLoader::pushCylinder(lua_State* L, std::shared_ptr<Cylinder> cylinder) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	if (std::shared_ptr<Creature> creature = cylinder->getCreature()) {
 		pushUserdata<Creature>(L, creature);
 		setCreatureMetatable(L, -1, creature);
@@ -182,10 +225,18 @@ void LuaFunctionsLoader::pushCylinder(lua_State* L, std::shared_ptr<Cylinder> cy
 }
 
 void LuaFunctionsLoader::pushString(lua_State* L, const std::string &value) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_pushlstring(L, value.c_str(), value.length());
 }
 
 void LuaFunctionsLoader::pushCallback(lua_State* L, int32_t callback) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_rawgeti(L, LUA_REGISTRYINDEX, callback);
 }
 
@@ -205,12 +256,20 @@ int32_t LuaFunctionsLoader::popCallback(lua_State* L) {
 
 // Metatables
 void LuaFunctionsLoader::setMetatable(lua_State* L, int32_t index, const std::string &name) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	luaL_getmetatable(L, name.c_str());
 	lua_setmetatable(L, index - 1);
 }
 
 void LuaFunctionsLoader::setWeakMetatable(lua_State* L, int32_t index, const std::string &name) {
-	static std::set<std::string> weakObjectTypes;
+	static phmap::flat_hash_set<std::string> weakObjectTypes;
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	const std::string &weakName = name + "_weak";
 
 	auto result = weakObjectTypes.emplace(name);
@@ -244,6 +303,10 @@ void LuaFunctionsLoader::setWeakMetatable(lua_State* L, int32_t index, const std
 }
 
 void LuaFunctionsLoader::setItemMetatable(lua_State* L, int32_t index, std::shared_ptr<Item> item) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	if (item && item->getContainer()) {
 		luaL_getmetatable(L, "Container");
 	} else if (item && item->getTeleport()) {
@@ -255,6 +318,10 @@ void LuaFunctionsLoader::setItemMetatable(lua_State* L, int32_t index, std::shar
 }
 
 void LuaFunctionsLoader::setCreatureMetatable(lua_State* L, int32_t index, std::shared_ptr<Creature> creature) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	if (creature && creature->getPlayer()) {
 		luaL_getmetatable(L, "Player");
 	} else if (creature && creature->getMonster()) {
@@ -306,7 +373,8 @@ std::string LuaFunctionsLoader::getFormatedLoggerMessage(lua_State* L) {
 	try {
 		return fmt::vformat(format, args);
 	} catch (const fmt::format_error &e) {
-		g_logger().error("[{}] format error: {}", __FUNCTION__, e.what());
+		g_logger().debug("[{}] format error: {}", __FUNCTION__, e.what());
+		reportErrorFunc(fmt::format("Format error, {}", e.what()));
 	}
 
 	return {};
@@ -492,10 +560,18 @@ std::string LuaFunctionsLoader::getUserdataTypeName(LuaData_t userType) {
 
 // Push
 void LuaFunctionsLoader::pushBoolean(lua_State* L, bool value) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_pushboolean(L, value ? 1 : 0);
 }
 
 void LuaFunctionsLoader::pushCombatDamage(lua_State* L, const CombatDamage &damage) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_pushnumber(L, damage.primary.value);
 	lua_pushnumber(L, damage.primary.type);
 	lua_pushnumber(L, damage.secondary.value);
@@ -504,6 +580,10 @@ void LuaFunctionsLoader::pushCombatDamage(lua_State* L, const CombatDamage &dama
 }
 
 void LuaFunctionsLoader::pushInstantSpell(lua_State* L, const InstantSpell &spell) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_createtable(L, 0, 6);
 
 	setField(L, "name", spell.getName());
@@ -517,6 +597,10 @@ void LuaFunctionsLoader::pushInstantSpell(lua_State* L, const InstantSpell &spel
 }
 
 void LuaFunctionsLoader::pushPosition(lua_State* L, const Position &position, int32_t stackpos /* = 0*/) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_createtable(L, 0, 4);
 
 	setField(L, "x", position.x);
@@ -528,6 +612,10 @@ void LuaFunctionsLoader::pushPosition(lua_State* L, const Position &position, in
 }
 
 void LuaFunctionsLoader::pushOutfit(lua_State* L, const Outfit_t &outfit) {
+	if (validateDispatcherContext(__FUNCTION__)) {
+		return;
+	}
+
 	lua_createtable(L, 0, 13);
 	setField(L, "lookType", outfit.lookType);
 	setField(L, "lookTypeEx", outfit.lookTypeEx);
@@ -689,5 +777,14 @@ int LuaFunctionsLoader::luaGarbageCollection(lua_State* L) {
 	if (objPtr) {
 		objPtr->reset();
 	}
+	return 0;
+}
+
+int LuaFunctionsLoader::validateDispatcherContext(std::string_view fncName) {
+	if (g_dispatcher().context().isOn() && g_dispatcher().context().isAsync()) {
+		g_logger().warn("[{}] The call to lua was ignored because the '{}' task is trying to communicate while in async mode.", fncName, g_dispatcher().context().getName());
+		return LUA_ERRRUN;
+	}
+
 	return 0;
 }

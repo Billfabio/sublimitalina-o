@@ -14,19 +14,17 @@ function login.onLogin(player)
 	end
 
 	-- Stamina
-	nextUseStaminaTime[player.uid] = 0
+	_G.NextUseStaminaTime[player.uid] = 0
 
 	-- Promotion
 	local vocation = player:getVocation()
 	local promotion = vocation:getPromotion()
 	if player:isPremium() then
-		local value = player:getStorageValue(Storage.Promotion)
-		if not promotion and value ~= 1 then
-			player:setStorageValue(STORAGEVALUE_PROMOTION, 1)
-		elseif value == 1 then
+		local hasPromotion = player:kv():get("promoted")
+		if not player:isPromoted() and hasPromotion then
 			player:setVocation(promotion)
 		end
-	elseif not promotion then
+	elseif player:isPromoted() then
 		player:setVocation(vocation:getDemotion())
 	end
 
@@ -35,9 +33,9 @@ function login.onLogin(player)
 	player:registerEvent("DropLoot")
 	player:registerEvent("BossParticipation")
 
-	if onExerciseTraining[player:getId()] then -- onLogin & onLogout
-		stopEvent(onExerciseTraining[player:getId()].event)
-		onExerciseTraining[player:getId()] = nil
+	if _G.OnExerciseTraining[player:getId()] then -- onLogin & onLogout
+		stopEvent(_G.OnExerciseTraining[player:getId()].event)
+		_G.OnExerciseTraining[player:getId()] = nil
 		player:setTraining(false)
 	end
 
@@ -100,10 +98,10 @@ function login.onLogin(player)
 	local playerId = player:getId()
 
 	-- Stamina
-	nextUseStaminaTime[playerId] = 1
+	_G.NextUseStaminaTime[playerId] = 1
 
 	-- EXP Stamina
-	nextUseXpStamina[playerId] = 1
+	_G.NextUseXpStamina[playerId] = 1
 
 	-- Set Client XP Gain Rate --
 	if configManager.getBoolean(configKeys.XP_DISPLAY_MODE) then

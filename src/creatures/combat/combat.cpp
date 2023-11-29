@@ -276,7 +276,7 @@ bool Combat::isInPvpZone(std::shared_ptr<Creature> attacker, std::shared_ptr<Cre
 }
 
 bool Combat::isProtected(std::shared_ptr<Player> attacker, std::shared_ptr<Player> target) {
-	uint32_t protectionLevel = g_configManager().getNumber(PROTECTION_LEVEL);
+	uint32_t protectionLevel = g_configManager().getNumber(PROTECTION_LEVEL, __FUNCTION__);
 	if (target->getLevel() < protectionLevel || attacker->getLevel() < protectionLevel) {
 		return true;
 	}
@@ -297,19 +297,20 @@ ReturnValue Combat::canDoCombat(std::shared_ptr<Creature> attacker, std::shared_
 		return RETURNVALUE_NOERROR;
 	}
 
+	auto targetPlayer = target ? target->getPlayer() : nullptr;
 	if (target) {
 		std::shared_ptr<Tile> tile = target->getTile();
 		if (tile->hasProperty(CONST_PROP_BLOCKPROJECTILE)) {
 			return RETURNVALUE_NOTENOUGHROOM;
 		}
 		if (tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
-			return RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
+			auto permittedOnPz = targetPlayer ? targetPlayer->hasPermittedConditionInPZ() : false;
+			return permittedOnPz ? RETURNVALUE_NOERROR : RETURNVALUE_ACTIONNOTPERMITTEDINPROTECTIONZONE;
 		}
 	}
 
 	if (attacker) {
 		const std::shared_ptr<Creature> attackerMaster = attacker->getMaster();
-		auto targetPlayer = target ? target->getPlayer() : nullptr;
 		if (targetPlayer) {
 			if (targetPlayer->hasFlag(PlayerFlags_t::CannotBeAttacked)) {
 				return RETURNVALUE_YOUMAYNOTATTACKTHISPLAYER;
@@ -568,7 +569,7 @@ void Combat::CombatHealthFunc(std::shared_ptr<Creature> caster, std::shared_ptr<
 		targetPlayer = target->getPlayer();
 	}
 
-	if (caster && attackerPlayer) {
+	if (attackerPlayer) {
 		std::shared_ptr<Item> item = attackerPlayer->getWeapon();
 		damage = applyImbuementElementalDamage(attackerPlayer, item, damage);
 		g_events().eventPlayerOnCombat(attackerPlayer, target, item, damage);
@@ -581,6 +582,9 @@ void Combat::CombatHealthFunc(std::shared_ptr<Creature> caster, std::shared_ptr<
 				damage.secondary.value /= 2;
 			}
 		}
+
+		damage.damageMultiplier += attackerPlayer->wheel()->getMajorStatConditional("Divine Empowerment", WheelMajor_t::DAMAGE);
+		g_logger().debug("Wheel Divine Empowerment damage multiplier {}", damage.damageMultiplier);
 	}
 
 	if (g_game().combatBlockHit(damage, caster, target, params.blockedByShield, params.blockedByArmor, params.itemId != 0)) {
@@ -898,7 +902,7 @@ void Combat::addDistanceEffect(std::shared_ptr<Creature> caster, const Position 
 
 void Combat::doChainEffect(const Position &origin, const Position &dest, uint8_t effect) {
 	if (effect > 0) {
-		std::forward_list<Direction> dirList;
+		stdext::arraylist<Direction> dirList(128);
 		FindPathParams fpp;
 		fpp.minTargetDist = 0;
 		fpp.maxTargetDist = 1;
@@ -1311,7 +1315,7 @@ std::vector<std::pair<Position, std::vector<uint32_t>>> Combat::pickChainTargets
 
 	std::vector<std::pair<Position, std::vector<uint32_t>>> resultMap;
 	std::vector<std::shared_ptr<Creature>> targets;
-	std::set<uint32_t> visited;
+	phmap::flat_hash_set<uint32_t> visited;
 
 	if (initialTarget && initialTarget != caster) {
 		targets.push_back(initialTarget);
@@ -2016,17 +2020,16 @@ void Combat::applyExtensions(std::shared_ptr<Creature> caster, std::shared_ptr<C
 		return;
 	}
 
-	g_logger().debug("[Combat::applyExtensions] - Applying extensions for {} on {}. Initial damage: {}", caster->getName(), target ? target->getName() : "null", damage.primary.value);
+	g_logger().trace("[Combat::applyExtensions] - Applying extensions for {} on {}. Initial damage: {}", caster->getName(), target ? target->getName() : "null", damage.primary.value);
 
 	// Critical hit
 	uint16_t chance = 0;
-	int32_t multiplier = 50;
+	int32_t bonus = 50;
 	auto player = caster->getPlayer();
 	auto monster = caster->getMonster();
 	if (player) {
 		chance = player->getSkillLevel(SKILL_CRITICAL_HIT_CHANCE);
-		multiplier = player->getSkillLevel(SKILL_CRITICAL_HIT_DAMAGE);
-
+		bonus = player->getSkillLevel(SKILL_CRITICAL_HIT_DAMAGE);
 		if (target) {
 			uint16_t playerCharmRaceid = player->parseRacebyCharm(CHARM_LOW, false, 0);
 			if (playerCharmRaceid != 0) {
@@ -2044,8 +2047,8 @@ void Combat::applyExtensions(std::shared_ptr<Creature> caster, std::shared_ptr<C
 		chance = monster->critChance();
 	}
 
-	multiplier += damage.criticalDamage;
-	multiplier = 1 + multiplier / 100;
+	bonus += damage.criticalDamage;
+	double multiplier = 1.0 + static_cast<double>(bonus) / 100;
 	chance += (uint16_t)damage.criticalChance;
 
 	if (chance != 0 && uniform_random(1, 100) <= chance) {

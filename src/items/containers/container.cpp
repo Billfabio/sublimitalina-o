@@ -17,7 +17,7 @@
 
 Container::Container(uint16_t type) :
 	Container(type, items[type].maxItems) {
-	m_maxItems = static_cast<uint32_t>(g_configManager().getNumber(MAX_CONTAINER_ITEM));
+	m_maxItems = static_cast<uint32_t>(g_configManager().getNumber(MAX_CONTAINER_ITEM, __FUNCTION__));
 	if (getID() == ITEM_GOLD_POUCH || isStoreInbox()) {
 		pagination = true;
 		m_maxItems = 2000;
@@ -58,7 +58,7 @@ std::shared_ptr<Container> Container::create(std::shared_ptr<Tile> tile) {
 Container::~Container() {
 	if (getID() == ITEM_BROWSEFIELD) {
 		for (std::shared_ptr<Item> item : itemlist) {
-			item->setParent(m_parent);
+			item->setParent(getParent());
 		}
 	}
 }
@@ -278,8 +278,8 @@ std::deque<std::shared_ptr<Item>> Container::getStoreInboxFilteredItems() const 
 	return storeInboxFilteredList;
 }
 
-phmap::flat_hash_set<ContainerCategory_t> Container::getStoreInboxValidCategories() const {
-	phmap::flat_hash_set<ContainerCategory_t> validCategories;
+std::vector<ContainerCategory_t> Container::getStoreInboxValidCategories() const {
+	stdext::vector_set<ContainerCategory_t> validCategories;
 	for (const auto &item : itemlist) {
 		auto itemId = item->getID();
 		auto attribute = item->getCustomAttribute("unWrapId");
@@ -297,7 +297,7 @@ phmap::flat_hash_set<ContainerCategory_t> Container::getStoreInboxValidCategorie
 		}
 	}
 
-	return validCategories;
+	return validCategories.data();
 }
 
 std::shared_ptr<Item> Container::getFilteredItemByIndex(size_t index) const {
@@ -359,6 +359,29 @@ bool Container::isHoldingItemWithId(const uint16_t id) {
 		}
 	}
 	return false;
+}
+
+bool Container::isInsideContainerWithId(const uint16_t id) {
+	auto nextParent = getParent();
+	while (nextParent != nullptr && nextParent->getContainer()) {
+		if (nextParent->getContainer()->getID() == id) {
+			return true;
+		}
+		nextParent = nextParent->getRealParent();
+	}
+	return false;
+}
+
+bool Container::isAnyKindOfRewardChest() {
+	return getID() == ITEM_REWARD_CHEST || getID() == ITEM_REWARD_CONTAINER && getParent() && getParent()->getContainer() && getParent()->getContainer()->getID() == ITEM_REWARD_CHEST || isBrowseFieldAndHoldsRewardChest();
+}
+
+bool Container::isAnyKindOfRewardContainer() {
+	return getID() == ITEM_REWARD_CHEST || getID() == ITEM_REWARD_CONTAINER || isHoldingItemWithId(ITEM_REWARD_CONTAINER) || isInsideContainerWithId(ITEM_REWARD_CONTAINER);
+}
+
+bool Container::isBrowseFieldAndHoldsRewardChest() {
+	return getID() == ITEM_BROWSEFIELD && isHoldingItemWithId(ITEM_REWARD_CHEST);
 }
 
 void Container::onAddContainerItem(std::shared_ptr<Item> item) {
@@ -453,7 +476,7 @@ ReturnValue Container::queryAdd(int32_t addIndex, const std::shared_ptr<Thing> &
 	if (std::shared_ptr<Container> topParentContainer = getTopParentContainer()) {
 		if (std::shared_ptr<Container> addContainer = item->getContainer()) {
 			uint32_t addContainerCount = addContainer->getContainerHoldingCount() + 1;
-			uint32_t maxContainer = static_cast<uint32_t>(g_configManager().getNumber(MAX_CONTAINER));
+			uint32_t maxContainer = static_cast<uint32_t>(g_configManager().getNumber(MAX_CONTAINER, __FUNCTION__));
 			if (addContainerCount + topParentContainer->getContainerHoldingCount() > maxContainer) {
 				return RETURNVALUE_CONTAINERISFULL;
 			}

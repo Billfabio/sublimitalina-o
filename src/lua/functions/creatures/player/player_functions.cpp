@@ -19,6 +19,7 @@
 #include "io/ioprey.hpp"
 #include "items/item.hpp"
 #include "lua/functions/creatures/player/player_functions.hpp"
+#include "game/scheduling/save_manager.hpp"
 #include "map/spectators.hpp"
 
 int PlayerFunctions::luaPlayerSendInventory(lua_State* L) {
@@ -327,8 +328,7 @@ int PlayerFunctions::luaPlayerIsMonsterBestiaryUnlocked(lua_State* L) {
 		return 0;
 	}
 
-	for (auto finishedMonsters = g_iobestiary().getBestiaryFinished(player);
-		 uint16_t finishedRaceId : finishedMonsters) {
+	for (uint16_t finishedRaceId : g_iobestiary().getBestiaryFinished(player)) {
 		if (raceId == finishedRaceId) {
 			pushBoolean(L, true);
 			return 1;
@@ -983,16 +983,17 @@ int PlayerFunctions::luaPlayerGetMaxMana(lua_State* L) {
 
 int PlayerFunctions::luaPlayerSetMaxMana(lua_State* L) {
 	// player:setMaxMana(maxMana)
-	std::shared_ptr<Player> player = getPlayer(L, 1);
-	if (player) {
-		player->manaMax = getNumber<int32_t>(L, 2);
-		player->mana = std::min<int32_t>(player->mana, player->manaMax);
-		g_game().addPlayerMana(player);
-		player->sendStats();
-		pushBoolean(L, true);
-	} else {
-		lua_pushnil(L);
+	const auto &player = getPlayer(L, 1);
+	if (!player) {
+		reportErrorFunc(getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		return 1;
 	}
+
+	player->manaMax = getNumber<int32_t>(L, 2);
+	player->mana = std::min<int32_t>(player->mana, player->manaMax);
+	g_game().addPlayerMana(player);
+	player->sendStats();
+	pushBoolean(L, true);
 	return 1;
 }
 
@@ -1379,7 +1380,23 @@ int PlayerFunctions::luaPlayerSetVocation(lua_State* L) {
 	}
 
 	player->setVocation(vocation->getId());
+	player->sendSkills();
+	player->sendStats();
+	player->sendBasicData();
+	player->wheel()->sendGiftOfLifeCooldown();
+	g_game().reloadCreature(player);
 	pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerIsPromoted(lua_State* L) {
+	// player:isPromoted()
+	std::shared_ptr<Player> player = getUserdataShared<Player>(L, 1);
+	if (player) {
+		pushBoolean(L, player->isPromoted());
+	} else {
+		lua_pushnil(L);
+	}
 	return 1;
 }
 
@@ -2824,10 +2841,7 @@ int PlayerFunctions::luaPlayerSave(lua_State* L) {
 		if (!player->isOffline()) {
 			player->loginPosition = player->getPosition();
 		}
-		pushBoolean(L, IOLoginData::savePlayer(player));
-		if (player->isOffline()) {
-			// avoiding memory leak
-		}
+		pushBoolean(L, g_saveManager().savePlayer(player));
 	} else {
 		lua_pushnil(L);
 	}
@@ -3864,7 +3878,7 @@ int PlayerFunctions::luaPlayerUpgradeSpellWOD(lua_State* L) {
 }
 
 int PlayerFunctions::luaPlayerRevelationStageWOD(lua_State* L) {
-	// player:revelationStagesWOD([name[, set]])
+	// player:revelationStageWOD([name[, set]])
 	std::shared_ptr<Player> player = getUserdataShared<Player>(L, 1);
 	if (!player) {
 		lua_pushnil(L);

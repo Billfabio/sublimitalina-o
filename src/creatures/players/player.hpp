@@ -88,12 +88,29 @@ struct OpenContainer {
 
 using MuteCountMap = std::map<uint32_t, uint32_t>;
 
-static constexpr int32_t PLAYER_MAX_SPEED = 65535;
-static constexpr int32_t PLAYER_MIN_SPEED = 10;
-static constexpr int32_t PLAYER_SOUND_HEALTH_CHANGE = 10;
+static constexpr uint16_t PLAYER_MAX_SPEED = std::numeric_limits<uint16_t>::max();
+static constexpr uint16_t PLAYER_MIN_SPEED = 10;
+static constexpr uint8_t PLAYER_SOUND_HEALTH_CHANGE = 10;
 
 class Player final : public Creature, public Cylinder, public Bankable {
 public:
+	class PlayerLock {
+	public:
+		explicit PlayerLock(const std::shared_ptr<Player> &p) :
+			player(p) {
+			player->mutex.lock();
+		}
+
+		PlayerLock(const PlayerLock &) = delete;
+
+		~PlayerLock() {
+			player->mutex.unlock();
+		}
+
+	private:
+		const std::shared_ptr<Player> &player;
+	};
+
 	explicit Player(ProtocolGame_ptr p);
 	~Player();
 
@@ -102,6 +119,9 @@ public:
 	Player &operator=(const Player &) = delete;
 
 	std::shared_ptr<Player> getPlayer() override {
+		return static_self_cast<Player>();
+	}
+	std::shared_ptr<const Player> getPlayer() const override {
 		return static_self_cast<Player>();
 	}
 
@@ -287,7 +307,7 @@ public:
 		return guildWarVector;
 	}
 
-	const phmap::parallel_flat_hash_set<std::shared_ptr<MonsterType>> &getCyclopediaMonsterTrackerSet(bool isBoss) const {
+	const std::unordered_set<std::shared_ptr<MonsterType>> &getCyclopediaMonsterTrackerSet(bool isBoss) const {
 		return isBoss ? m_bosstiaryMonsterTracker : m_bestiaryMonsterTracker;
 	}
 
@@ -301,17 +321,17 @@ public:
 		}
 	}
 
-	void refreshCyclopediaMonsterTracker(bool isBoss = false) const {
+	void refreshCyclopediaMonsterTracker(bool isBoss = false) {
 		refreshCyclopediaMonsterTracker(getCyclopediaMonsterTrackerSet(isBoss), isBoss);
 	}
 
-	void refreshCyclopediaMonsterTracker(const phmap::parallel_flat_hash_set<std::shared_ptr<MonsterType>> &trackerList, bool isBoss) const {
+	void refreshCyclopediaMonsterTracker(const std::unordered_set<std::shared_ptr<MonsterType>> &trackerList, bool isBoss) const {
 		if (client) {
 			client->refreshCyclopediaMonsterTracker(trackerList, isBoss);
 		}
 	}
 
-	bool isBossOnBosstiaryTracker(const std::shared_ptr<MonsterType> monsterType) const;
+	bool isBossOnBosstiaryTracker(const std::shared_ptr<MonsterType> &monsterType) const;
 
 	Vocation* getVocation() const {
 		return vocation;
@@ -322,6 +342,10 @@ public:
 	}
 	void setOperatingSystem(OperatingSystem_t clientos) {
 		operatingSystem = clientos;
+	}
+
+	bool isOldProtocol() {
+		return client && client->oldProtocol;
 	}
 
 	uint32_t getProtocolVersion() const {
@@ -454,7 +478,14 @@ public:
 			client->disconnect();
 		}
 	}
-	uint32_t getIP() const;
+
+	uint32_t getIP() const {
+		return client ? client->getIP() : 0;
+	}
+
+	bool isDisconnected() const {
+		return getIP() == 0;
+	}
 
 	void addContainer(uint8_t cid, std::shared_ptr<Container> container);
 	void closeContainer(uint8_t cid);
@@ -473,7 +504,7 @@ public:
 	void addStorageValueByName(const std::string &storageName, const int32_t value, const bool isLogin = false);
 
 	std::shared_ptr<KV> kv() const {
-		return g_kv().scoped("player")->scoped(fmt::format("{}", getID()));
+		return g_kv().scoped("player")->scoped(fmt::format("{}", getGUID()));
 	}
 
 	void genReservedStorageRange();
@@ -581,7 +612,7 @@ public:
 	}
 
 	bool isVip() const {
-		return g_configManager().getBoolean(VIP_SYSTEM_ENABLED) && getPremiumDays() > 0;
+		return g_configManager().getBoolean(VIP_SYSTEM_ENABLED, __FUNCTION__) && getPremiumDays() > 0;
 	}
 
 	void setTibiaCoins(int32_t v);
@@ -787,18 +818,18 @@ public:
 	}
 
 	// V.I.P. functions
-	void notifyStatusChange(std::shared_ptr<Player> player, VipStatus_t status, bool message = true);
+	void notifyStatusChange(std::shared_ptr<Player> player, VipStatus_t status, bool message = true) const;
 	bool removeVIP(uint32_t vipGuid);
 	bool addVIP(uint32_t vipGuid, const std::string &vipName, VipStatus_t status);
 	bool addVIPInternal(uint32_t vipGuid);
-	bool editVIP(uint32_t vipGuid, const std::string &description, uint32_t icon, bool notify);
+	bool editVIP(uint32_t vipGuid, const std::string &description, uint32_t icon, bool notify) const;
 
 	// follow functions
 	bool setFollowCreature(std::shared_ptr<Creature> creature) override;
 	void goToFollowCreature() override;
 
 	// follow events
-	void onFollowCreature(std::shared_ptr<Creature> creature) override;
+	void onFollowCreature(const std::shared_ptr<Creature> &) override;
 
 	// walk events
 	void onWalk(Direction &dir) override;
@@ -898,7 +929,8 @@ public:
 	void onAttacked() override;
 	void onAttackedCreatureDrainHealth(std::shared_ptr<Creature> target, int32_t points) override;
 	void onTargetCreatureGainHealth(std::shared_ptr<Creature> target, int32_t points) override;
-	bool onKilledCreature(std::shared_ptr<Creature> target, bool lastHit = true) override;
+	bool onKilledPlayer(const std::shared_ptr<Player> &target, bool lastHit) override;
+	bool onKilledMonster(const std::shared_ptr<Monster> &target) override;
 	void onGainExperience(uint64_t gainExp, std::shared_ptr<Creature> target) override;
 	void onGainSharedExperience(uint64_t gainExp, std::shared_ptr<Creature> target);
 	void onAttackedCreatureBlockHit(BlockType_t blockType) override;
@@ -1213,7 +1245,7 @@ public:
 
 	void onCreatureAppear(std::shared_ptr<Creature> creature, bool isLogin) override;
 	void onRemoveCreature(std::shared_ptr<Creature> creature, bool isLogout) override;
-	void onCreatureMove(std::shared_ptr<Creature> creature, std::shared_ptr<Tile> newTile, const Position &newPos, std::shared_ptr<Tile> oldTile, const Position &oldPos, bool teleport) override;
+	void onCreatureMove(const std::shared_ptr<Creature> &creature, const std::shared_ptr<Tile> &newTile, const Position &newPos, const std::shared_ptr<Tile> &oldTile, const Position &oldPos, bool teleport) override;
 
 	void onAttackedCreatureDisappear(bool isLogout) override;
 	void onFollowCreatureDisappear(bool isLogout) override;
@@ -1588,9 +1620,9 @@ public:
 			client->sendHighscoresNoData();
 		}
 	}
-	void sendHighscores(const std::vector<HighscoreCharacter> &characters, uint8_t categoryId, uint32_t vocationId, uint16_t page, uint16_t pages) {
+	void sendHighscores(const std::vector<HighscoreCharacter> &characters, uint8_t categoryId, uint32_t vocationId, uint16_t page, uint16_t pages, uint32_t updateTimer) {
 		if (client) {
-			client->sendHighscores(characters, categoryId, vocationId, page, pages);
+			client->sendHighscores(characters, categoryId, vocationId, page, pages, updateTimer);
 		}
 	}
 	void addAsyncOngoingTask(uint64_t flags) {
@@ -1743,6 +1775,11 @@ public:
 	}
 
 	void setExpBoostStamina(uint16_t stamina) {
+		// only allow stamina boosts of 12 hours or less
+		if (stamina > 12 * 3600) {
+			expBoostStamina = 12 * 3600;
+			return;
+		}
 		expBoostStamina = stamina;
 	}
 
@@ -2051,13 +2088,13 @@ public:
 	}
 
 	void sendPreyTimeLeft(const std::unique_ptr<PreySlot> &slot) const {
-		if (g_configManager().getBoolean(PREY_ENABLED) && client) {
+		if (g_configManager().getBoolean(PREY_ENABLED, __FUNCTION__) && client) {
 			client->sendPreyTimeLeft(slot);
 		}
 	}
 
 	void reloadPreySlot(PreySlot_t slotid) {
-		if (g_configManager().getBoolean(PREY_ENABLED) && client) {
+		if (g_configManager().getBoolean(PREY_ENABLED, __FUNCTION__) && client) {
 			client->sendPreyData(getPreySlotById(slotid));
 			client->sendResourcesBalance(getMoney(), getBankBalance(), getPreyCards(), getTaskHuntingPoints());
 		}
@@ -2107,7 +2144,7 @@ public:
 	}
 
 	uint32_t getPreyRerollPrice() const {
-		return getLevel() * g_configManager().getNumber(PREY_REROLL_PRICE_LEVEL);
+		return getLevel() * g_configManager().getNumber(PREY_REROLL_PRICE_LEVEL, __FUNCTION__);
 	}
 
 	std::vector<uint16_t> getPreyBlackList() const {
@@ -2127,7 +2164,7 @@ public:
 	}
 
 	const std::unique_ptr<PreySlot> &getPreyWithMonster(uint16_t raceId) const {
-		if (!g_configManager().getBoolean(PREY_ENABLED)) {
+		if (!g_configManager().getBoolean(PREY_ENABLED, __FUNCTION__)) {
 			return PreySlotNull;
 		}
 
@@ -2155,7 +2192,7 @@ public:
 	}
 
 	void reloadTaskSlot(PreySlot_t slotid) {
-		if (g_configManager().getBoolean(TASK_HUNTING_ENABLED) && client) {
+		if (g_configManager().getBoolean(TASK_HUNTING_ENABLED, __FUNCTION__) && client) {
 			client->sendTaskHuntingData(getTaskHuntingSlotById(slotid));
 			client->sendResourcesBalance(getMoney(), getBankBalance(), getPreyCards(), getTaskHuntingPoints());
 		}
@@ -2223,11 +2260,11 @@ public:
 	}
 
 	uint32_t getTaskHuntingRerollPrice() const {
-		return getLevel() * g_configManager().getNumber(TASK_HUNTING_REROLL_PRICE_LEVEL);
+		return getLevel() * g_configManager().getNumber(TASK_HUNTING_REROLL_PRICE_LEVEL, __FUNCTION__);
 	}
 
 	const std::unique_ptr<TaskHuntingSlot> &getTaskHuntingWithCreature(uint16_t raceId) const {
-		if (!g_configManager().getBoolean(TASK_HUNTING_ENABLED)) {
+		if (!g_configManager().getBoolean(TASK_HUNTING_ENABLED, __FUNCTION__)) {
 			return TaskHuntingSlotNull;
 		}
 
@@ -2470,10 +2507,18 @@ public:
 	std::map<uint16_t, uint16_t> getActiveConcoctions() const {
 		return activeConcoctions;
 	}
+	bool isConcoctionActive(Concoction_t concotion) const {
+		uint16_t itemId = static_cast<uint16_t>(concotion);
+		if (!activeConcoctions.contains(itemId)) {
+			return false;
+		}
+		auto timeLeft = activeConcoctions.at(itemId);
+		return timeLeft > 0;
+	}
 
 	bool checkAutoLoot() const {
-		const bool autoLoot = g_configManager().getBoolean(AUTOLOOT) && getStorageValue(STORAGEVALUE_AUTO_LOOT) != 0;
-		if (g_configManager().getBoolean(VIP_SYSTEM_ENABLED) && g_configManager().getBoolean(VIP_AUTOLOOT_VIP_ONLY)) {
+		const bool autoLoot = g_configManager().getBoolean(AUTOLOOT, __FUNCTION__) && getStorageValue(STORAGEVALUE_AUTO_LOOT) > 0;
+		if (g_configManager().getBoolean(VIP_SYSTEM_ENABLED, __FUNCTION__) && g_configManager().getBoolean(VIP_AUTOLOOT_VIP_ONLY, __FUNCTION__)) {
 			return autoLoot && isVip();
 		}
 		return autoLoot;
@@ -2503,7 +2548,12 @@ public:
 
 	std::shared_ptr<Container> getLootPouch();
 
+	bool hasPermittedConditionInPZ() const;
+
 private:
+	friend class PlayerLock;
+	std::mutex mutex;
+
 	static uint32_t playerFirstID;
 	static uint32_t playerLastID;
 
@@ -2569,8 +2619,11 @@ private:
 	void internalAddThing(std::shared_ptr<Thing> thing) override;
 	void internalAddThing(uint32_t index, std::shared_ptr<Thing> thing) override;
 
-	phmap::flat_hash_set<uint32_t> attackedSet;
+	void addHuntingTaskKill(const std::shared_ptr<MonsterType> &mType);
+	void addBestiaryKill(const std::shared_ptr<MonsterType> &mType);
+	void addBosstiaryKill(const std::shared_ptr<MonsterType> &mType);
 
+	phmap::flat_hash_set<uint32_t> attackedSet;
 	phmap::flat_hash_set<uint32_t> VIPList;
 
 	std::map<uint8_t, OpenContainer> openContainers;
@@ -2583,7 +2636,7 @@ private:
 	std::map<uint8_t, uint16_t> maxValuePerSkill = {
 		{ SKILL_LIFE_LEECH_CHANCE, 100 },
 		{ SKILL_MANA_LEECH_CHANCE, 100 },
-		{ SKILL_CRITICAL_HIT_CHANCE, g_configManager().getNumber(CRITICALCHANCE) }
+		{ SKILL_CRITICAL_HIT_CHANCE, g_configManager().getNumber(CRITICALCHANCE, "std::map::maxValuePerSkill") }
 	};
 
 	std::map<uint64_t, std::shared_ptr<Reward>> rewardMap;
@@ -2607,8 +2660,8 @@ private:
 	// TODO: This variable is only temporarily used when logging in, get rid of it somehow.
 	std::forward_list<std::shared_ptr<Condition>> storedConditionList;
 
-	phmap::parallel_flat_hash_set<std::shared_ptr<MonsterType>> m_bestiaryMonsterTracker;
-	phmap::parallel_flat_hash_set<std::shared_ptr<MonsterType>> m_bosstiaryMonsterTracker;
+	std::unordered_set<std::shared_ptr<MonsterType>> m_bestiaryMonsterTracker;
+	std::unordered_set<std::shared_ptr<MonsterType>> m_bosstiaryMonsterTracker;
 
 	std::string name;
 	std::string guildNick;
@@ -2820,14 +2873,14 @@ private:
 
 	bool isPromoted() const;
 
-	bool onFistAttackSpeed = g_configManager().getBoolean(TOGGLE_ATTACK_SPEED_ONFIST);
-	uint32_t MAX_ATTACK_SPEED = g_configManager().getNumber(MAX_SPEED_ATTACKONFIST);
+	bool onFistAttackSpeed = g_configManager().getBoolean(TOGGLE_ATTACK_SPEED_ONFIST, "Player.hpp::onFistAttackSpeed");
+	uint32_t MAX_ATTACK_SPEED = g_configManager().getNumber(MAX_SPEED_ATTACKONFIST, "Player.hpp::MAX_ATTACK_SPEED");
 
 	uint32_t getAttackSpeed() const {
 		if (onFistAttackSpeed) {
 			uint32_t baseAttackSpeed = vocation->getAttackSpeed();
 			uint32_t skillLevel = getSkillLevel(SKILL_FIST);
-			uint32_t attackSpeed = baseAttackSpeed - (skillLevel * g_configManager().getNumber(MULTIPLIER_ATTACKONFIST));
+			uint32_t attackSpeed = baseAttackSpeed - (skillLevel * g_configManager().getNumber(MULTIPLIER_ATTACKONFIST, __FUNCTION__));
 
 			if (attackSpeed < MAX_ATTACK_SPEED) {
 				attackSpeed = MAX_ATTACK_SPEED;
@@ -2849,7 +2902,7 @@ private:
 	void addConditionSuppression(const std::array<ConditionType_t, ConditionType_t::CONDITION_COUNT> &addConditions);
 
 	uint16_t getLookCorpse() const override;
-	void getPathSearchParams(std::shared_ptr<Creature> creature, FindPathParams &fpp) override;
+	void getPathSearchParams(const std::shared_ptr<Creature> &creature, FindPathParams &fpp) override;
 
 	void setDead(bool isDead) {
 		dead = isDead;
@@ -2862,6 +2915,7 @@ private:
 	void clearCooldowns();
 
 	friend class Game;
+	friend class SaveManager;
 	friend class Npc;
 	friend class PlayerFunctions;
 	friend class NetworkMessageFunctions;
@@ -2894,4 +2948,7 @@ private:
 	void updateDamageReductionFromItemImbuement(std::array<double_t, COMBAT_COUNT> &combatReductionMap, std::shared_ptr<Item> item, uint16_t combatTypeIndex) const;
 	void updateDamageReductionFromItemAbility(std::array<double_t, COMBAT_COUNT> &combatReductionMap, std::shared_ptr<Item> item, uint16_t combatTypeIndex) const;
 	double_t calculateDamageReduction(double_t currentTotal, int16_t resistance) const;
+
+	void removeEmptyRewards();
+	bool hasOtherRewardContainerOpen(const std::shared_ptr<Container> container) const;
 };

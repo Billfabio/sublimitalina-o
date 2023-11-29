@@ -1248,7 +1248,7 @@ uint32_t ConditionRegeneration::getHealthTicks(std::shared_ptr<Creature> creatur
 	std::shared_ptr<Player> player = creature->getPlayer();
 
 	if (player != nullptr && isBuff) {
-		return healthTicks / g_configManager().getFloat(RATE_SPELL_COOLDOWN);
+		return healthTicks / g_configManager().getFloat(RATE_SPELL_COOLDOWN, __FUNCTION__);
 	}
 
 	return healthTicks;
@@ -1258,7 +1258,7 @@ uint32_t ConditionRegeneration::getManaTicks(std::shared_ptr<Creature> creature)
 	std::shared_ptr<Player> player = creature->getPlayer();
 
 	if (player != nullptr && isBuff) {
-		return manaTicks / g_configManager().getFloat(RATE_SPELL_COOLDOWN);
+		return manaTicks / g_configManager().getFloat(RATE_SPELL_COOLDOWN, __FUNCTION__);
 	}
 
 	return manaTicks;
@@ -1929,7 +1929,7 @@ bool ConditionFeared::getFleeDirection(std::shared_ptr<Creature> creature) {
 	return false;
 }
 
-bool ConditionFeared::getFleePath(std::shared_ptr<Creature> creature, const Position &pos, std::forward_list<Direction> &dirList) {
+bool ConditionFeared::getFleePath(std::shared_ptr<Creature> creature, const Position &pos, stdext::arraylist<Direction> &dirList) {
 	const std::vector<uint8_t> walkSize { 15, 9, 3, 1 };
 	bool found = false;
 	std::ptrdiff_t found_size = 0;
@@ -2030,7 +2030,7 @@ bool ConditionFeared::startCondition(std::shared_ptr<Creature> creature) {
 
 bool ConditionFeared::executeCondition(std::shared_ptr<Creature> creature, int32_t interval) {
 	Position currentPos = creature->getPosition();
-	std::forward_list<Direction> listDir;
+	stdext::arraylist<Direction> listDir(128);
 
 	g_logger().debug("[ConditionFeared::executeCondition] Executing condition, current position is {}", currentPos.toString());
 
@@ -2040,7 +2040,7 @@ bool ConditionFeared::executeCondition(std::shared_ptr<Creature> creature, int32
 		}
 
 		if (getFleePath(creature, currentPos, listDir)) {
-			g_dispatcher().addTask(std::bind(&Game::forcePlayerAutoWalk, &g_game(), creature->getID(), listDir), "ConditionFeared::executeCondition");
+			g_dispatcher().addEvent(std::bind(&Game::forcePlayerAutoWalk, &g_game(), creature->getID(), listDir.data()), "ConditionFeared::executeCondition");
 			g_logger().debug("[ConditionFeared::executeCondition] Walking Scheduled");
 		}
 	}
@@ -2257,7 +2257,7 @@ void ConditionOutfit::serialize(PropWriteStream &propWriteStream) {
 }
 
 bool ConditionOutfit::startCondition(std::shared_ptr<Creature> creature) {
-	if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS) && outfit.lookType != 0 && !g_game().isLookTypeRegistered(outfit.lookType)) {
+	if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS, __FUNCTION__) && outfit.lookType != 0 && !g_game().isLookTypeRegistered(outfit.lookType)) {
 		g_logger().warn("[ConditionOutfit::startCondition] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
 		return false;
 	}
@@ -2289,7 +2289,7 @@ void ConditionOutfit::endCondition(std::shared_ptr<Creature> creature) {
 }
 
 void ConditionOutfit::addCondition(std::shared_ptr<Creature> creature, const std::shared_ptr<Condition> addCondition) {
-	if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS) && outfit.lookType != 0 && !g_game().isLookTypeRegistered(outfit.lookType)) {
+	if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS, __FUNCTION__) && outfit.lookType != 0 && !g_game().isLookTypeRegistered(outfit.lookType)) {
 		g_logger().warn("[ConditionOutfit::addCondition] An unregistered creature looktype type with id '{}' was blocked to prevent client crash.", outfit.lookType);
 		return;
 	}

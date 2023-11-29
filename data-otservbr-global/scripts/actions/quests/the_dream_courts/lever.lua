@@ -4,7 +4,6 @@ local config = {
 		position = Position(33617, 32561, 13),
 	},
 	requiredLevel = 250,
-
 	timeToDefeat = 15 * 60,
 	playerPositions = {
 		{ pos = Position(33638, 32562, 13), teleport = Position(33617, 32567, 13), effect = CONST_ME_TELEPORT },
@@ -18,7 +17,6 @@ local config = {
 		to = Position(33627, 32570, 13),
 	},
 	exit = Position(33618, 32523, 15),
-	storage = Storage.Quest.U12_00.TheDreamCourts.FacelessBaneTime,
 }
 
 local lever = BossLever(config)

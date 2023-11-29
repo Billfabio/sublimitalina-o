@@ -1,21 +1,23 @@
 local combatGrenade = Combat()
 combatGrenade:setParameter(COMBAT_PARAM_TYPE, COMBAT_HOLYDAMAGE)
 combatGrenade:setArea(createCombatArea(AREA_CIRCLE2X2))
+combatGrenade:setParameter(COMBAT_PARAM_EFFECT, CONST_ME_HOLYDAMAGE)
 
 function onGetFormulaValues(player, level, maglevel)
 	local min = (level / 5) + (maglevel * 4)
 	local max = (level / 5) + (maglevel * 6)
-	local multiplier = 1.0
+
 	local grade = player:upgradeSpellsWOD("Divine Grenade")
-	if grade >= WHEEL_GRADE_MAX then
-		multiplier = 2.0
-	elseif grade >= WHEEL_GRADE_UPGRADED then
-		multiplier = 1.6
-	elseif grade >= WHEEL_GRADE_REGULAR then
-		multiplier = 1.3
+
+	local multiplier = 1.0
+	if grade ~= WHEEL_GRADE_NONE then
+		local multiplierByGrade = { 1.3, 1.6, 2.0 }
+		multiplier = multiplierByGrade[grade]
 	end
+
 	min = min * multiplier
 	max = max * multiplier
+
 	return -min, -max
 end
 
@@ -38,49 +40,49 @@ local explodeGrenade = function(position, playerId)
 	var.type = 2 -- VARIANT_POSITION
 	var.pos = position
 	combatGrenade:execute(player, var)
-	player:getPosition():removeMagicEffect(CONST_ME_DIVINE_GRENADE)
 end
 
-local combatCast = Combat()
-combatCast:setParameter(COMBAT_PARAM_DISTANCEEFFECT, CONST_ANI_HOLY)
+local function removeGrenadeEffect(position)
+	position:removeMagicEffect(CONST_ME_DIVINE_GRENADE)
+end
 
 function onTargetCreature(creature, target)
-	if not creature and target and creature:isPlayer() then
+	if not (creature and target and creature:isPlayer()) then
 		return false
 	end
 
-	local position = target:getPosition()
+	local position = creature:getPosition():getWithinRange(target:getPosition(), 4)
 	addEvent(explodeGrenade, 3000, position, creature:getId())
+	addEvent(removeGrenadeEffect, 3000, position)
 	return true
 end
 
+local combatCast = Combat()
 combatCast:setCallback(CALLBACK_PARAM_TARGETCREATURE, "onTargetCreature")
 
 local spell = Spell("instant")
 
 function spell.onCastSpell(creature, var)
-	if not (creature and creature:isPlayer()) then
+	if not creature or not creature:isPlayer() then
 		return false
 	end
-	local grade = creature:upgradeSpellsWOD("Divine Grenade")
-	if grade == WHEEL_GRADE_NONE then
+
+	local grade = creature:revelationStageWOD("Divine Grenade")
+
+	if grade == 0 then
 		creature:sendCancelMessage("You cannot cast this spell")
 		creature:getPosition():sendMagicEffect(CONST_ME_POFF)
 		return false
 	end
 
-	local cooldown = 0
-	if grade >= WHEEL_GRADE_MAX then
-		cooldown = 14
-	elseif grade >= WHEEL_GRADE_UPGRADED then
-		cooldown = 20
-	elseif grade >= WHEEL_GRADE_REGULAR then
-		cooldown = 26
-	end
+	local cooldownByGrade = { 26, 20, 14 }
+	local cooldown = cooldownByGrade[grade]
 
 	var.instantName = "Divine Grenade Cast"
 	if combatCast:execute(creature, var) then
-		creature:getPosition():sendMagicEffect(CONST_ME_DIVINE_GRENADE)
+		local target = Creature(var:getNumber())
+		local position = creature:getPosition():getWithinRange(target:getPosition(), 4)
+		position:sendMagicEffect(CONST_ME_DIVINE_GRENADE)
 		local condition = Condition(CONDITION_SPELLCOOLDOWN, CONDITIONID_DEFAULT, 258)
 		condition:setTicks((cooldown * 1000) / configManager.getFloat(configKeys.RATE_SPELL_COOLDOWN))
 		creature:addCondition(condition)

@@ -16,7 +16,7 @@
 
 bool Vocations::loadFromXml() {
 	pugi::xml_document doc;
-	auto folder = g_configManager().getString(CORE_DIRECTORY) + "/XML/vocations.xml";
+	auto folder = g_configManager().getString(CORE_DIRECTORY, __FUNCTION__) + "/XML/vocations.xml";
 	pugi::xml_parse_result result = doc.load_file(folder.c_str());
 	if (!result) {
 		printXMLError(__FUNCTION__, folder, result);
@@ -162,6 +162,16 @@ bool Vocations::loadFromXml() {
 				pugi::xml_attribute armorAttribute = childNode.attribute("armor");
 				if (armorAttribute) {
 					voc.armorMultiplier = pugi::cast<float>(armorAttribute.value());
+				}
+			} else if (strcasecmp(childNode.name(), "pvp") == 0) {
+				pugi::xml_attribute pvpDamageReceivedMultiplier = childNode.attribute("damageReceivedMultiplier");
+				if (pvpDamageReceivedMultiplier) {
+					voc.pvpDamageReceivedMultiplier = pugi::cast<float>(pvpDamageReceivedMultiplier.value());
+				}
+
+				pugi::xml_attribute pvpDamageDealtMultiplier = childNode.attribute("damageDealtMultiplier");
+				if (pvpDamageDealtMultiplier) {
+					voc.pvpDamageDealtMultiplier = pugi::cast<float>(pvpDamageDealtMultiplier.value());
 				}
 			}
 		}

@@ -49,7 +49,7 @@ void IOMapSerialize::loadHouseItems(Map* map) {
 			loadItem(propStream, tile, true);
 		}
 	} while (result->next());
-	g_logger().info("Loaded house items in {} seconds", bm_context.duration());
+	g_logger().info("Loaded house items in {} milliseconds", bm_context.duration());
 }
 bool IOMapSerialize::saveHouseItems() {
 	bool success = DBTransaction::executeWithinTransaction([]() {
@@ -64,8 +64,6 @@ bool IOMapSerialize::saveHouseItems() {
 }
 
 bool IOMapSerialize::SaveHouseItemsGuard() {
-	Benchmark bm_context;
-
 	Database &db = Database::getInstance();
 	std::ostringstream query;
 
@@ -79,7 +77,7 @@ bool IOMapSerialize::SaveHouseItemsGuard() {
 	PropWriteStream stream;
 	for (const auto &[key, house] : g_game().map.houses.getHouses()) {
 		// save house items
-		for (std::shared_ptr<HouseTile> tile : house->getTiles()) {
+		for (const auto &tile : house->getTiles()) {
 			saveTile(stream, tile);
 
 			size_t attributesSize;
@@ -98,7 +96,6 @@ bool IOMapSerialize::SaveHouseItemsGuard() {
 		return false;
 	}
 
-	g_logger().info("Saved house items in {} seconds", bm_context.duration());
 	return true;
 }
 
@@ -119,8 +116,6 @@ bool IOMapSerialize::loadContainer(PropStream &propStream, std::shared_ptr<Conta
 	return true;
 }
 
-uint32_t NEW_BEDS_START_ID = 30000;
-
 bool IOMapSerialize::loadItem(PropStream &propStream, std::shared_ptr<Cylinder> parent, bool isHouseItem /*= false*/) {
 	uint16_t id;
 	if (!propStream.read<uint16_t>(id)) {
@@ -133,14 +128,16 @@ bool IOMapSerialize::loadItem(PropStream &propStream, std::shared_ptr<Cylinder> 
 	}
 
 	const ItemType &iType = Item::items[id];
-	if (isHouseItem && iType.isBed() && id < NEW_BEDS_START_ID) {
-		return false;
-	}
-	if (iType.moveable || !tile || iType.isCarpet() || iType.isBed()) {
+	if (iType.isBed() || iType.moveable || !tile || iType.isCarpet()) {
 		// create a new item
-		std::shared_ptr<Item> item = Item::CreateItem(id);
+		auto item = Item::CreateItem(id);
 		if (item) {
 			if (item->unserializeAttr(propStream)) {
+				// Remove only not moveable and not sleeper bed
+				auto bed = item->getBed();
+				if (isHouseItem && iType.isBed() && bed && bed->getSleeper() == 0 && !iType.moveable) {
+					return false;
+				}
 				std::shared_ptr<Container> container = item->getContainer();
 				if (container && !loadContainer(propStream, container)) {
 					return false;
@@ -236,7 +233,12 @@ void IOMapSerialize::saveTile(PropWriteStream &stream, std::shared_ptr<Tile> til
 	std::forward_list<std::shared_ptr<Item>> items;
 	uint16_t count = 0;
 	for (auto &item : *tileItems) {
-		if (!item->isSavedToHouses()) {
+		if (item->getID() == ITEM_BATHTUB_FILLED_NOTMOVABLE) {
+			std::shared_ptr<Item> tub = Item::CreateItem(ITEM_BATHTUB_FILLED);
+			items.push_front(tub);
+			++count;
+			continue;
+		} else if (!item->isSavedToHouses()) {
 			continue;
 		}
 
@@ -272,7 +274,7 @@ bool IOMapSerialize::loadHouseInfo() {
 			uint32_t owner = result->getNumber<uint32_t>("owner");
 			int32_t newOwner = result->getNumber<int32_t>("new_owner");
 			// Transfer house owner
-			auto isTransferOnRestart = g_configManager().getBoolean(TOGGLE_HOUSE_TRANSFER_ON_SERVER_RESTART);
+			auto isTransferOnRestart = g_configManager().getBoolean(TOGGLE_HOUSE_TRANSFER_ON_SERVER_RESTART, __FUNCTION__);
 			if (isTransferOnRestart && newOwner >= 0) {
 				g_game().setTransferPlayerHouseItems(houseId, owner);
 				if (newOwner == 0) {

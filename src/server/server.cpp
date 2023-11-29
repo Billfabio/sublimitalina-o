@@ -12,7 +12,7 @@
 #include "server/network/message/outputmessage.hpp"
 #include "server/server.hpp"
 #include "config/configmanager.hpp"
-#include "game/scheduling/scheduler.hpp"
+#include "game/scheduling/dispatcher.hpp"
 #include "creatures/players/management/ban.hpp"
 
 ServiceManager::~ServiceManager() {
@@ -108,7 +108,7 @@ void ServicePort::onAccept(Connection_ptr connection, const std::error_code &err
 		if (!pendingStart) {
 			close();
 			pendingStart = true;
-			g_scheduler().addEvent(15000, std::bind_front(&ServicePort::openAcceptor, std::weak_ptr<ServicePort>(shared_from_this()), serverPort), "ServicePort::openAcceptor");
+			g_dispatcher().scheduleEvent(15000, std::bind_front(&ServicePort::openAcceptor, std::weak_ptr<ServicePort>(shared_from_this()), serverPort), "ServicePort::openAcceptor");
 		}
 	}
 }
@@ -144,8 +144,8 @@ void ServicePort::open(uint16_t port) {
 	pendingStart = false;
 
 	try {
-		if (g_configManager().getBoolean(BIND_ONLY_GLOBAL_ADDRESS)) {
-			acceptor.reset(new asio::ip::tcp::acceptor(io_service, asio::ip::tcp::endpoint(asio::ip::address(asio::ip::address_v4::from_string(g_configManager().getString(IP))), serverPort)));
+		if (g_configManager().getBoolean(BIND_ONLY_GLOBAL_ADDRESS, __FUNCTION__)) {
+			acceptor.reset(new asio::ip::tcp::acceptor(io_service, asio::ip::tcp::endpoint(asio::ip::address(asio::ip::address_v4::from_string(g_configManager().getString(IP, __FUNCTION__))), serverPort)));
 		} else {
 			acceptor.reset(new asio::ip::tcp::acceptor(io_service, asio::ip::tcp::endpoint(asio::ip::address(asio::ip::address_v4(INADDR_ANY)), serverPort)));
 		}
@@ -157,7 +157,7 @@ void ServicePort::open(uint16_t port) {
 		g_logger().warn("[ServicePort::open] - Error code: {}", e.what());
 
 		pendingStart = true;
-		g_scheduler().addEvent(15000, std::bind_front(&ServicePort::openAcceptor, std::weak_ptr<ServicePort>(shared_from_this()), port), "ServicePort::openAcceptor");
+		g_dispatcher().scheduleEvent(15000, std::bind_front(&ServicePort::openAcceptor, std::weak_ptr<ServicePort>(shared_from_this()), port), "ServicePort::openAcceptor");
 	}
 }
 

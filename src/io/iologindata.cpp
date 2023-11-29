@@ -25,7 +25,7 @@ bool IOLoginData::gameWorldAuthentication(const std::string &accountDescriptor, 
 		return false;
 	}
 
-	if (g_configManager().getString(AUTH_TYPE) == "session") {
+	if (g_configManager().getString(AUTH_TYPE, __FUNCTION__) == "session") {
 		if (!account.authenticate()) {
 			return false;
 		}
@@ -83,22 +83,22 @@ void IOLoginData::updateOnlineStatus(uint32_t guid, bool login) {
 	Database::getInstance().executeQuery(query.str());
 }
 
-// The boolean "disable" will desactivate the loading of information that is not relevant to the preload, for example, forge, bosstiary, etc. None of this we need to access if the player is offline
-bool IOLoginData::loadPlayerById(std::shared_ptr<Player> player, uint32_t id, bool disable /* = true*/) {
+// The boolean "disableIrrelevantInfo" will desactivate the loading of information that is not relevant to the preload, for example, forge, bosstiary, etc. None of this we need to access if the player is offline
+bool IOLoginData::loadPlayerById(std::shared_ptr<Player> player, uint32_t id, bool disableIrrelevantInfo /* = true*/) {
 	Database &db = Database::getInstance();
 	std::ostringstream query;
 	query << "SELECT * FROM `players` WHERE `id` = " << id;
-	return loadPlayer(player, db.storeQuery(query.str()), disable);
+	return loadPlayer(player, db.storeQuery(query.str()), disableIrrelevantInfo);
 }
 
-bool IOLoginData::loadPlayerByName(std::shared_ptr<Player> player, const std::string &name, bool disable /* = true*/) {
+bool IOLoginData::loadPlayerByName(std::shared_ptr<Player> player, const std::string &name, bool disableIrrelevantInfo /* = true*/) {
 	Database &db = Database::getInstance();
 	std::ostringstream query;
 	query << "SELECT * FROM `players` WHERE `name` = " << db.escapeString(name);
-	return loadPlayer(player, db.storeQuery(query.str()), disable);
+	return loadPlayer(player, db.storeQuery(query.str()), disableIrrelevantInfo);
 }
 
-bool IOLoginData::loadPlayer(std::shared_ptr<Player> player, DBResult_ptr result, bool disable /* = false*/) {
+bool IOLoginData::loadPlayer(std::shared_ptr<Player> player, DBResult_ptr result, bool disableIrrelevantInfo /* = false*/) {
 	if (!result || !player) {
 		std::string nullptrType = !result ? "Result" : "Player";
 		g_logger().warn("[{}] - {} is nullptr", __FUNCTION__, nullptrType);
@@ -165,6 +165,10 @@ bool IOLoginData::loadPlayer(std::shared_ptr<Player> player, DBResult_ptr result
 
 		// Load task hunting class
 		IOLoginDataLoad::loadPlayerTaskHuntingClass(player, result);
+
+		if (disableIrrelevantInfo) {
+			return true;
+		}
 
 		// load forge history
 		IOLoginDataLoad::loadPlayerForgeHistory(player, result);
@@ -362,7 +366,9 @@ void IOLoginData::addVIPEntry(uint32_t accountId, uint32_t guid, const std::stri
 
 	std::ostringstream query;
 	query << "INSERT INTO `account_viplist` (`account_id`, `player_id`, `description`, `icon`, `notify`) VALUES (" << accountId << ',' << guid << ',' << db.escapeString(description) << ',' << icon << ',' << notify << ')';
-	db.executeQuery(query.str());
+	if (!db.executeQuery(query.str())) {
+		g_logger().error("Failed to add VIP entry for account %u. QUERY: %s", accountId, query.str().c_str());
+	}
 }
 
 void IOLoginData::editVIPEntry(uint32_t accountId, uint32_t guid, const std::string &description, uint32_t icon, bool notify) {
@@ -370,7 +376,9 @@ void IOLoginData::editVIPEntry(uint32_t accountId, uint32_t guid, const std::str
 
 	std::ostringstream query;
 	query << "UPDATE `account_viplist` SET `description` = " << db.escapeString(description) << ", `icon` = " << icon << ", `notify` = " << notify << " WHERE `account_id` = " << accountId << " AND `player_id` = " << guid;
-	db.executeQuery(query.str());
+	if (!db.executeQuery(query.str())) {
+		g_logger().error("Failed to edit VIP entry for account %u. QUERY: %s", accountId, query.str().c_str());
+	}
 }
 
 void IOLoginData::removeVIPEntry(uint32_t accountId, uint32_t guid) {

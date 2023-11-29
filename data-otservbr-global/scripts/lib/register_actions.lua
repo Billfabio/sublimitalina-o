@@ -465,8 +465,7 @@ function onUseShovel(player, item, fromPosition, target, toPosition, isHotkey)
 	if table.contains(holes, target.itemid) then
 		target:transform(target.itemid + 1)
 		target:decay()
-		toPosition:moveDownstairs()
-		toPosition.y = toPosition.y - 1
+		toPosition.z = toPosition.z + 1
 		if Tile(toPosition):hasFlag(TILESTATE_PROTECTIONZONE) and player:isPzLocked() then
 			player:sendCancelMessage(RETURNVALUE_PLAYERISPZLOCKED)
 			return true
@@ -626,10 +625,6 @@ function onUsePick(player, item, fromPosition, target, toPosition, isHotkey)
 		end
 		target:getPosition():sendMagicEffect(CONST_ME_BLOCKHIT)
 		target:remove(1)
-	elseif target.itemid == 10310 then
-		target:remove(1)
-		toPosition:sendMagicEffect(CONST_ME_POFF)
-		player:addItem(3035, 10)
 	elseif target.itemid == 7200 then
 		target:transform(7236)
 		target:decay()

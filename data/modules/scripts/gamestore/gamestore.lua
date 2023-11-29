@@ -349,7 +349,7 @@ GameStore.Categories = {
 		state = GameStore.States.STATE_NONE,
 		offers = {
 			{
-				icons = { "Exercise_Axe.png" },
+				icons = { "Durable_Exercise_Axe.png" },
 				name = "Durable Exercise Axe",
 				price = 90,
 				itemtype = 35280,
@@ -358,7 +358,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Bow.png" },
+				icons = { "Durable_Exercise_Bow.png" },
 				name = "Durable Exercise Bow",
 				price = 90,
 				itemtype = 35282,
@@ -367,7 +367,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Club.png" },
+				icons = { "Durable_Exercise_Club.png" },
 				name = "Durable Exercise Club",
 				price = 90,
 				itemtype = 35281,
@@ -376,7 +376,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Rod.png" },
+				icons = { "Durable_Exercise_Rod.png" },
 				name = "Durable Exercise Rod",
 				price = 90,
 				itemtype = 35283,
@@ -385,7 +385,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Sword.png" },
+				icons = { "Durable_Exercise_Sword.png" },
 				name = "Durable Exercise Sword",
 				price = 90,
 				itemtype = 35279,
@@ -394,7 +394,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Wand.png" },
+				icons = { "Durable_Exercise_Wand.png" },
 				name = "Durable Exercise Wand",
 				price = 90,
 				itemtype = 35284,
@@ -403,7 +403,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Shield.png" },
+				icons = { "Durable_Exercise_Shield.png" },
 				name = "Durable Exercise Shield",
 				price = 90,
 				itemtype = 44066,
@@ -475,7 +475,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Axe.png" },
+				icons = { "Lasting_Exercise_Axe.png" },
 				name = "Lasting Exercise Axe",
 				price = 720,
 				itemtype = 35286,
@@ -484,7 +484,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Bow.png" },
+				icons = { "Lasting_Exercise_Bow.png" },
 				name = "Lasting Exercise Bow",
 				price = 720,
 				itemtype = 35288,
@@ -493,7 +493,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Club.png" },
+				icons = { "Lasting_Exercise_Club.png" },
 				name = "Lasting Exercise Club",
 				price = 720,
 				itemtype = 35287,
@@ -502,7 +502,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Rod.png" },
+				icons = { "Lasting_Exercise_Rod.png" },
 				name = "Lasting Exercise Rod",
 				price = 720,
 				itemtype = 35289,
@@ -511,7 +511,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Sword.png" },
+				icons = { "Lasting_Exercise_Sword.png" },
 				name = "Lasting Exercise Sword",
 				price = 720,
 				itemtype = 35285,
@@ -520,7 +520,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Wand.png" },
+				icons = { "Lasting_Exercise_Wand.png" },
 				name = "Lasting Exercise Wand",
 				price = 720,
 				itemtype = 35290,
@@ -529,7 +529,7 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_CHARGES,
 			},
 			{
-				icons = { "Exercise_Shield.png" },
+				icons = { "Lasting_Exercise_Shield.png" },
 				name = "Lasting Exercise Shield",
 				price = 720,
 				itemtype = 44067,
@@ -1115,19 +1115,19 @@ GameStore.Categories = {
 		state = GameStore.States.STATE_NONE,
 		offers = {
 			{
-				icons = { "Arctic_Unicorn.png" },
-				name = "Artic Unicorn",
-				price = 870,
-				id = 114,
-				description = "{character}\n{speedboost}\n\n<i>The Arctic Unicorn lives in a deep rivalry with its cousin the Blazing Unicorn. Even though they were born in completely different areas, they somehow share the same bloodline. The eternal battle between fire and ice continues. Who will win? Tangerine vs.crystal blue! The choice is yours!</i>",
-				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
-			},
-			{
 				icons = { "Armoured_War_Horse.png" },
 				name = "Armoured War Horse",
 				price = 870,
 				id = 23,
 				description = "{character}\n{speedboost}\n\n<i>The Armoured War Horse is a dangerous black beauty! When you see its threatening, blood-red eyes coming towards you, you'll know trouble is on its way. Protected by its heavy armour plates, the warhorse is the perfect partner for dangerous hunting sessions and excessive enemy slaughtering.</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+			},
+			{
+				icons = { "Arctic_Unicorn.png" },
+				name = "Artic Unicorn",
+				price = 870,
+				id = 114,
+				description = "{character}\n{speedboost}\n\n<i>The Arctic Unicorn lives in a deep rivalry with its cousin the Blazing Unicorn. Even though they were born in completely different areas, they somehow share the same bloodline. The eternal battle between fire and ice continues. Who will win? Tangerine vs.crystal blue! The choice is yours!</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
@@ -1179,6 +1179,14 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
+				icons = { "Bogwurm.png" },
+				name = "Bogwurm",
+				price = 870,
+				id = 189,
+				description = "{character}\n{speedboost}\n\n<i>The Bogwurm, Gloomwurm, and Rustwurm belong to a little known subset of the dragon family, and usually live out their lives in habitats far away from human interaction. Them being cunning hunters, and their keen sense of perception make these wurms great companions for whomever can locate and tame them.</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+			},
+			{
 				icons = { "Boreal_Owl.png" },
 				name = "Boreal Owl",
 				price = 870,
@@ -1192,14 +1200,6 @@ GameStore.Categories = {
 				price = 750,
 				id = 208,
 				description = "{character}\n{speedboost}\n\n<i>The vibrant colours and elegance of a Tangerine Flecked Koi, a Brass Speckled Koi, and an Ink Spotted Koi make them a fascinating sight to behold, and their boisterous nature and speed will make you the first to arrive wherever there are riches to gain. Wield your weapon as gracefully and effortlessly as your swimming companion glides through the water, and the two of you will make the perfect and most deadly pair.</i>",
-				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
-			},
-			{
-				icons = { "Bogwurm.png" },
-				name = "Bogwurm",
-				price = 870,
-				id = 189,
-				description = "{character}\n{speedboost}\n\n<i>The Bogwurm, Gloomwurm, and Rustwurm belong to a little known subset of the dragon family, and usually live out their lives in habitats far away from human interaction. Them being cunning hunters, and their keen sense of perception make these wurms great companions for whomever can locate and tame them.</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
@@ -1274,6 +1274,16 @@ GameStore.Categories = {
 				description = "{character}\n{speedboost}\n\n<i>If the Coralripper moves its fins, it generates enough air pressure that it can even float over land. Its numerous eyes allow it to quickly detect dangers even in confusing situations and eliminate them with one powerful bite. If you watch your fingers, you are going to be good friends.</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
+			--[[{
+				icons = { "Corpsefire_Skull.png" },
+				name = "Corpsefire Skull",
+				price = 750,
+				id = 221,
+				description = "{character}\n{speedboost}\n\n<i>Skulls are the infernal heralds of untamed power. Bodies are obsolete when sinister forces animate your being. Embrace their presence and command the devastating might that awaits on the back of an eerie Corpsefire Skull!</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+				state = GameStore.States.STATE_NEW,
+				home = true,
+			},]]
 			{
 				icons = { "Cranium_Spider.png" },
 				name = "Cranium Spider",
@@ -1307,6 +1317,14 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
+				icons = { "Darkfire_Devourer.png" },
+				name = "Darkfire Devourer",
+				price = 1300,
+				id = 213,
+				description = "{character}\n{speedboost}\n\n<i>A wild, ancient creature, which had been hiding in the depths of the shadows for a very long time, has been spotted in Tibia again! The almighty Shadow Draptor has returned and only the bravest Tibians can control such a beast!</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+			},
+			{
 				icons = { "Dawn_Strayer.png" },
 				name = "Dawn Strayer",
 				price = 870,
@@ -1330,6 +1348,16 @@ GameStore.Categories = {
 				description = "{character}\n{speedboost}\n\n<i>Its roaring is piercing marrow and bone and can be heard over ten miles away. The Desert King is the undisputed ruler of its territory and no one messes with this animal. Show no fear and prove yourself worthy of its trust and you will get yourself a valuable companion for your adventures.</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
+			--[[{
+				icons = { "Doom_Skull.png" },
+				name = "Doom Skull",
+				price = 750,
+				id = 219,
+				description = "{character}\n{speedboost}\n\n<i>Skulls are the infernal heralds of untamed power. Bodies are obsolete when sinister forces animate your being. Embrace their presence and command the devastating might that awaits on the back of a grim Doom Skull.</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+				state = GameStore.States.STATE_NEW,
+				home = true,
+			},]]
 			{
 				icons = { "Doombringer.png" },
 				name = "Doombringer",
@@ -1496,6 +1524,14 @@ GameStore.Categories = {
 				price = 900,
 				id = 65,
 				description = "{character}\n{speedboost}\n\n<i>The Flying Divan is the perfect mount for those who are too busy to take care of an animal mount or simply like to travel on a beautiful, magic hand-woven carpet.</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+			},
+			{
+				icons = { "Foxmouse.png" },
+				name = "Foxmouse",
+				price = 750,
+				id = 218,
+				description = "{character}\n{speedboost}\n\n<i>A wild, ancient creature, which had been hiding in the depths of the shadows for a very long time, has been spotted in Tibia again! The almighty Shadow Draptor has returned and only the bravest Tibians can control such a beast!</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
@@ -1698,6 +1734,16 @@ GameStore.Categories = {
 				description = "{character}\n{speedboost}\n\n<i>The Magic Carpet is the perfect mount for those who are too busy to take care of an animal mount or simply like to travel on a beautiful, magic hand-woven carpet.</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
+			--[[{
+				icons = { "Magma_Skull.png" },
+				name = "Magma Skull",
+				price = 750,
+				id = 220,
+				description = "{character}\n{speedboost}\n\n<i>Skulls are the infernal heralds of untamed power. Bodies are obsolete when sinister forces animate your being. Embrace their presence and command the devastating might that awaits on the back of a blazing Magma Skull.</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+				state = GameStore.States.STATE_NEW,
+				home = true,
+			},]]
 			{
 				icons = { "Marsh_Toad.png" },
 				name = "Marsh Toad",
@@ -2027,6 +2073,14 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
+				icons = { "Snow_Strider.png" },
+				name = "Snow Strider",
+				price = 870,
+				id = 164,
+				description = "{character}\n{speedboost}\n\n<i>A magical fire burns inside these wolves. Bred as the faithful guardians for an eccentric wizard's tower, these creatures make for loyal companions during your travels. While not originally intended for riding, their sturdy frame makes the Dawn Strayer, Dusk Pryer and Snow Strider suitable mounts.</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
+			},
+			{
 				icons = { "Snowy_Owl.png" },
 				name = "Snowy Owl",
 				price = 870,
@@ -2035,11 +2089,11 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
-				icons = { "Snow_Strider.png" },
-				name = "Snow Strider",
-				price = 870,
-				id = 164,
-				description = "{character}\n{speedboost}\n\n<i>A magical fire burns inside these wolves. Bred as the faithful guardians for an eccentric wizard's tower, these creatures make for loyal companions during your travels. While not originally intended for riding, their sturdy frame makes the Dawn Strayer, Dusk Pryer and Snow Strider suitable mounts.</i>",
+				icons = { "Spirit_of_Purity.png" },
+				name = "Spirit of Purity",
+				price = 1000,
+				id = 215,
+				description = "{character}\n{speedboost}\n\n<i>A wild, ancient creature, which had been hiding in the depths of the shadows for a very long time, has been spotted in Tibia again! The almighty Shadow Draptor has returned and only the bravest Tibians can control such a beast!</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_MOUNT,
 			},
 			{
@@ -2340,6 +2394,15 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_OUTFIT,
 			},
 			{
+				icons = { "Outfit_Flamefury_Mage_Male_Addon_3.png", "Outfit_Flamefury_Mage_Female_Addon_3.png" },
+				name = "Full Flamefury Mage Outfit",
+				price = 870,
+				sexId = { female = 1681, male = 1680 },
+				addon = 3,
+				description = "{character}\n{info} colours can be changed using the Outfit dialog\n{info} includes basic outfit and 2 addons which can be selected individually\n\n<i>Flame fury mages not only embraced the fury to fire, they became it! Relishing in purging destruction they don't just want to see the world burn, but be an active part in it. They just love the smell of sulphur in the morning!</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_OUTFIT,
+			},
+			{
 				icons = { "Outfit_Forest_Warden_Male_Addon_3.png", "Outfit_Forest_Warden_Female_Addon_3.png" },
 				name = "Full Forest Warden Outfit",
 				price = 750,
@@ -2607,6 +2670,24 @@ GameStore.Categories = {
 				sexId = { female = 900, male = 899 },
 				addon = 3,
 				description = "{character}\n{info} colours can be changed using the Outfit dialog\n{info} includes basic outfit and 2 addons which can be selected individually\n\n<i>You spend hours in the woods in search of wild and rare animals? Countless stuffed skulls of deer, wolves and other creatures are decorating your walls? Now you have the chance to present your trophies in public. Become a Trophy Hunter and cover your shoulders with the finest bear skulls!</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_OUTFIT,
+			},
+			{
+				icons = { "Outfit_Veteran_Paladin_Male_Addon_3.png", "Outfit_Veteran_Paladin_Female_Addon_3.png" },
+				name = "Full Veteran Paladin Outfit",
+				price = 750,
+				sexId = { female = 1205, male = 1204 },
+				addon = 3,
+				description = "{character}\n{info} colours can be changed using the Outfit dialog\n{info} includes basic outfit and 2 addons which can be selected individually\n\n<i>A Veteran Paladin has mastered the art of distance fighting. No matter how far away his prey may be, a marksman like the Veteran Paladin will always hit with extraordinary precision. No one can escape his keen hawk-eyed vision and even small stones become deadly weapons in his hands.</i>",
+				type = GameStore.OfferTypes.OFFER_TYPE_OUTFIT,
+			},
+			{
+				icons = { "Outfit_Void_Master_Male_Addon_3.png", "Outfit_Void_Master_Female_Addon_3.png" },
+				name = "Full Void Master Outfit",
+				price = 750,
+				sexId = { female = 1203, male = 1202 },
+				addon = 3,
+				description = "{character}\n{info} colours can be changed using the Outfit dialog\n{info} includes basic outfit and 2 addons which can be selected individually\n\n<i>According to ancient rumours, the pulsating orb that the Void Master balances skilfully on the tip of his staff consists of powerful cosmic spheres. If you gaze too long into the infinite emptiness inside the orb, its powers will absorb your mind.</i>",
 				type = GameStore.OfferTypes.OFFER_TYPE_OUTFIT,
 			},
 			{
@@ -3081,8 +3162,8 @@ GameStore.Categories = {
 			{
 				icons = { "Demon_Statue.png" },
 				name = "Demon Statue",
-				price = 34058,
-				itemtype = 31212,
+				price = 25,
+				itemtype = 34058,
 				count = 1,
 				description = "{house}\n{box}\n{storeinbox}\n{use}\n{backtoinbox}",
 				type = GameStore.OfferTypes.OFFER_TYPE_HOUSE,
@@ -6655,15 +6736,6 @@ GameStore.Categories = {
 				type = GameStore.OfferTypes.OFFER_TYPE_HOUSE,
 			},
 			{
-				icons = { "Outfit_Veteran_Paladin_Male_Addon_3.png", "Outfit_Veteran_Paladin_Female_Addon_3.png" },
-				name = "Full Veteran Paladin Outfit",
-				price = 1750,
-				sexId = { female = 1205, male = 1204 },
-				addon = 3,
-				description = "{info} usable by all characters of the account\n{info} colours can be changed using the Outfit dialog\n{info} includes basic outfit and 2 addons which can be selected individually\n\n<i>A Veteran Paladin has mastered the art of distance fighting. No matter how far away his prey may be, a marksman like the Veteran Paladin will always hit with extraordinary precision. No one can escape his keen hawk-eyed vision and even small stones become deadly weapons in his hands.</i>",
-				type = GameStore.OfferTypes.OFFER_TYPE_OUTFIT,
-			},
-			{
 				icons = { "Vexclaw_Doll.png" },
 				name = "Vexclaw Doll",
 				price = 400,
@@ -6671,15 +6743,6 @@ GameStore.Categories = {
 				count = 1,
 				description = "{house}\n{box}\n{storeinbox}\n{backtoinbox}",
 				type = GameStore.OfferTypes.OFFER_TYPE_HOUSE,
-			},
-			{
-				icons = { "Outfit_Void_Master_Male_Addon_3.png", "Outfit_Void_Master_Female_Addon_3.png" },
-				name = "Full Void Master Outfit",
-				price = 1750,
-				sexId = { female = 1203, male = 1202 },
-				addon = 3,
-				description = "{info} usable by all characters of the account\n{info} colours can be changed using the Outfit dialog\n{info} includes basic outfit and 2 addons which can be selected individually\n\n<i>According to ancient rumours, the pulsating orb that the Void Master balances skilfully on the tip of his staff consists of powerful cosmic spheres. If you gaze too long into the infinite emptiness inside the orb, its powers will absorb your mind.</i>",
-				type = GameStore.OfferTypes.OFFER_TYPE_OUTFIT,
 			},
 		},
 	},

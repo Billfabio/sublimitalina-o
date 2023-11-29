@@ -55,6 +55,10 @@ public:
 		return static_self_cast<Container>();
 	}
 
+	std::shared_ptr<const Container> getContainer() const override final {
+		return static_self_cast<Container>();
+	}
+
 	std::shared_ptr<Container> getRootContainer();
 
 	virtual std::shared_ptr<DepotLocker> getDepotLocker() {
@@ -109,7 +113,7 @@ public:
 	bool isStoreInbox() const;
 	bool isStoreInboxFiltered() const;
 	std::deque<std::shared_ptr<Item>> getStoreInboxFilteredItems() const;
-	phmap::flat_hash_set<ContainerCategory_t> getStoreInboxValidCategories() const;
+	std::vector<ContainerCategory_t> getStoreInboxValidCategories() const;
 	std::shared_ptr<Item> getFilteredItemByIndex(size_t index) const;
 	std::shared_ptr<Item> getItemByIndex(size_t index) const;
 	bool isHoldingItem(std::shared_ptr<Item> item);
@@ -160,6 +164,11 @@ public:
 	void stopDecaying() override;
 
 	virtual void removeItem(std::shared_ptr<Thing> thing, bool sendUpdateToClient = false);
+
+	bool isAnyKindOfRewardChest();
+	bool isAnyKindOfRewardContainer();
+	bool isBrowseFieldAndHoldsRewardChest();
+	bool isInsideContainerWithId(const uint16_t id);
 
 protected:
 	std::ostringstream &getContentDescription(std::ostringstream &os, bool oldProtocol);

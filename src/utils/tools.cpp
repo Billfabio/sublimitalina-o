@@ -257,6 +257,15 @@ void trim_left(std::string &source, char t) {
 	source.erase(0, source.find_first_not_of(t));
 }
 
+std::string keepFirstWordOnly(std::string &str) {
+	size_t spacePos = str.find(' ');
+	if (spacePos != std::string::npos) {
+		str.erase(spacePos);
+	}
+
+	return str;
+}
+
 void toLowerCaseString(std::string &source) {
 	std::transform(source.begin(), source.end(), source.begin(), tolower);
 }
@@ -398,23 +407,13 @@ int32_t uniform_random(int32_t minNumber, int32_t maxNumber) {
 
 int32_t normal_random(int32_t minNumber, int32_t maxNumber) {
 	static std::normal_distribution<float> normalRand(0.5f, 0.25f);
-	if (minNumber == maxNumber) {
-		return minNumber;
-	} else if (minNumber > maxNumber) {
-		std::swap(minNumber, maxNumber);
-	}
+	float v;
+	do {
+		v = normalRand(getRandomGenerator());
+	} while (v < 0.0 || v > 1.0);
 
-	int32_t increment;
-	const int32_t diff = maxNumber - minNumber;
-	const float v = normalRand(getRandomGenerator());
-	if (v < 0.0) {
-		increment = diff / 2;
-	} else if (v > 1.0) {
-		increment = (diff + 1) / 2;
-	} else {
-		increment = round(v * diff);
-	}
-	return minNumber + increment;
+	auto &&[a, b] = std::minmax(minNumber, maxNumber);
+	return a + std::lround(v * (b - a));
 }
 
 bool boolean_random(double probability /* = 0.5*/) {
@@ -834,7 +833,6 @@ AmmoTypeNames ammoTypeNames = {
 	{ "throwingknife", AMMO_THROWINGKNIFE },
 	{ "diamondarrow", AMMO_ARROW },
 	{ "spectralbolt", AMMO_BOLT },
-
 };
 
 WeaponActionNames weaponActionNames = {
@@ -1456,8 +1454,13 @@ const char* getReturnMessage(ReturnValue value) {
 	}
 }
 
+int64_t OTSYSTIME = 0;
+void UPDATE_OTSYS_TIME() {
+	OTSYSTIME = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 int64_t OTSYS_TIME() {
-	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	return OTSYSTIME;
 }
 
 SpellGroup_t stringToSpellGroup(const std::string &value) {
@@ -1510,17 +1513,6 @@ void consoleHandlerExit() {
 		getchar();
 	}
 	return;
-}
-
-std::string validateNameHouse(const std::string &list) {
-	std::string result;
-	for (char c : list) {
-		if (isalpha(c) || c == ' ' || c == '\'' || c == '!' || c == '\n'
-			|| c == '?' || c == '#' || c == '@' || c == '*') {
-			result += c;
-		}
-	}
-	return result;
 }
 
 NameEval_t validateName(const std::string &name) {
@@ -1794,4 +1786,20 @@ std::string formatNumber(uint64_t number) {
 		pos -= 3;
 	}
 	return formattedNumber;
+}
+
+void sleep_for(uint64_t ms) {
+	std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
+/**
+ * @brief Formats a string to be used as KV key (lowercase, spaces replaced with -, no whitespace)
+ * @param str The string to format
+ * @return The formatted string
+ */
+std::string toKey(const std::string &str) {
+	std::string key = asLowerCaseString(str);
+	std::replace(key.begin(), key.end(), ' ', '-');
+	key.erase(std::remove_if(key.begin(), key.end(), [](char c) { return std::isspace(c); }), key.end());
+	return key;
 }

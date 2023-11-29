@@ -4,11 +4,11 @@ function Monster.setReward(self, enable)
 			error("Rewards can only be enabled to rewards bosses.")
 			return false
 		end
-		GlobalBosses[self:getId()] = {}
+		_G.GlobalBosses[self:getId()] = {}
 		self:registerEvent("BossDeath")
 		self:registerEvent("BossThink")
 	else
-		GlobalBosses[self:getId()] = nil
+		_G.GlobalBosses[self:getId()] = nil
 		self:unregisterEvent("BossDeath")
 		self:unregisterEvent("BossThink")
 	end
@@ -21,7 +21,16 @@ function Monster:setRewardBoss()
 	end
 end
 
+local equipmentBags = {
+	BagYouCovetId,
+	BagYouDesireId,
+	PrimalBagId,
+}
+
 local function isEquipment(itemType)
+	if table.contains(equipmentBags, itemType:getId()) then
+		return true
+	end
 	local t = itemType:getType()
 	local equipmentTypes = {
 		ITEM_TYPE_ARMOR,

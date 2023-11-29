@@ -11,7 +11,7 @@
 
 #include "server/network/webhook/webhook.hpp"
 #include "config/configmanager.hpp"
-#include "game/scheduling/scheduler.hpp"
+#include "game/scheduling/dispatcher.hpp"
 #include "utils/tools.hpp"
 
 Webhook::Webhook(ThreadPool &threadPool) :
@@ -38,8 +38,8 @@ Webhook &Webhook::getInstance() {
 
 void Webhook::run() {
 	threadPool.addLoad([this] { sendWebhook(); });
-	g_scheduler().addEvent(
-		g_configManager().getNumber(DISCORD_WEBHOOK_DELAY_MS), [this] { run(); }, "Webhook::run"
+	g_dispatcher().scheduleEvent(
+		g_configManager().getNumber(DISCORD_WEBHOOK_DELAY_MS, __FUNCTION__), [this] { run(); }, "Webhook::run"
 	);
 }
 
@@ -50,7 +50,7 @@ void Webhook::sendMessage(const std::string payload, std::string url) {
 
 void Webhook::sendMessage(const std::string title, const std::string message, int color, std::string url) {
 	if (url.empty()) {
-		url = g_configManager().getString(DISCORD_WEBHOOK_URL);
+		url = g_configManager().getString(DISCORD_WEBHOOK_URL, __FUNCTION__);
 	}
 
 	if (url.empty() || title.empty() || message.empty()) {
@@ -74,7 +74,7 @@ int Webhook::sendRequest(const char* url, const char* payload, std::string* resp
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &Webhook::writeCallback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(response_body));
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, "canary (https://github.com/Hydractify/canary)");
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "canary (https://github.com/opentibiabr/canary)");
 
 	CURLcode res = curl_easy_perform(curl);
 
@@ -106,7 +106,7 @@ std::string Webhook::getPayload(const std::string title, const std::string messa
 
 	std::stringstream footer_text;
 	footer_text
-		<< g_configManager().getString(SERVER_NAME) << " | "
+		<< g_configManager().getString(SERVER_NAME, __FUNCTION__) << " | "
 		<< time_buf;
 
 	std::stringstream payload;

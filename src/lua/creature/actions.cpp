@@ -310,6 +310,10 @@ ReturnValue Actions::internalUseItem(std::shared_ptr<Player> player, const Posit
 
 		// reward chest
 		if (container->getRewardChest() != nullptr && container->getParent()) {
+			if (!player->hasOtherRewardContainerOpen(container->getParent()->getContainer())) {
+				player->removeEmptyRewards();
+			}
+
 			std::shared_ptr<RewardChest> playerRewardChest = player->getRewardChest();
 			if (playerRewardChest->empty()) {
 				return RETURNVALUE_REWARDCHESTISEMPTY;
@@ -403,14 +407,14 @@ bool Actions::useItem(std::shared_ptr<Player> player, const Position &pos, uint8
 	}
 
 	if (it.isRune() || it.type == ITEM_TYPE_POTION) {
-		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL));
+		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	} else {
-		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL));
+		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 
 	// only send cooldown icon if it's an multi use item
 	if (it.isMultiUse()) {
-		player->sendUseItemCooldown(g_configManager().getNumber(ACTIONS_DELAY_INTERVAL));
+		player->sendUseItemCooldown(g_configManager().getNumber(ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 	return true;
 }
@@ -456,13 +460,13 @@ bool Actions::useItemEx(std::shared_ptr<Player> player, const Position &fromPos,
 	}
 
 	if (it.isRune() || it.type == ITEM_TYPE_POTION) {
-		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL));
+		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	} else {
-		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL));
+		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 
 	if (it.isMultiUse()) {
-		player->sendUseItemCooldown(g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL));
+		player->sendUseItemCooldown(g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 	return true;
 }

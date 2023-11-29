@@ -4,7 +4,6 @@ local config = {
 		position = Position(33456, 31473, 13),
 	},
 	requiredLevel = 250,
-
 	playerPositions = {
 		{ pos = Position(33455, 31493, 13), teleport = Position(33455, 31464, 13), effect = CONST_ME_TELEPORT },
 		{ pos = Position(33456, 31493, 13), teleport = Position(33455, 31464, 13), effect = CONST_ME_TELEPORT },
@@ -17,7 +16,6 @@ local config = {
 		to = Position(33464, 31481, 13),
 	},
 	exit = Position(32347, 32167, 12),
-	storage = Storage.Quest.U12_20.GraveDanger.Bosses.DukeKruleTimer,
 }
 
 local lever = BossLever(config)

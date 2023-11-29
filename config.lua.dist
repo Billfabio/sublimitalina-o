@@ -10,7 +10,16 @@ coreDirectory = "data"
 -- Set log level
 -- It can be trace, debug, info, warning, error, critical, off (default: info).
 -- NOTE: Will only display logs with level higher or equal the one set.
-logLevel = "debug"
+logLevel = "info"
+
+--- Toggles the server's maintenance mode.
+-- When enabled, it restricts user access and indicates maintenance operations.
+-- @field [parent=#global] #boolean toggleMaintainMode false by default, set to true to enable maintenance mode.
+toggleMaintainMode = false
+--- Message displayed during maintenance mode.
+-- Should inform the expected downtime or resumption details succinctly.
+-- @field [parent=#global] #string maintainModeMessage an empty string by default, set a custom message if needed.
+maintainModeMessage = ""
 
 -- Combat settings
 -- NOTE: valid values for worldType are: "pvp", "no-pvp" and "pvp-enforced"
@@ -149,6 +158,13 @@ loyaltyPointsPerPremiumDaySpent = 0
 loyaltyPointsPerPremiumDayPurchased = 0
 loyaltyBonusPercentageMultiplier = 1.0
 
+-- Custom PvP system
+-- NOTE: Rate is additive percent for each level and applied multiplicative to totalDamage
+-- NOTE: Damage multipliers for each vocation are adjusted in data/XML/vocations.xml
+pvpRateDamageTakenPerLevel = 0.0 -- recommended to start with 0.1
+pvpRateDamageReductionPerLevel = 0.0 -- recommended to start with 0.1
+pvpMaxLevelDifference = 0
+
 -- Wheel of destiny system
 -- NOTE: set wheelSystemEnabled = false to disable the wheel of destiny
 -- NOTE: only the wheel points are modified, all other data is on the client executable and cannot be modified
@@ -269,6 +285,7 @@ houseRentRate = 1.0
 houseOwnedByAccount = false
 houseBuyLevel = 100
 housePurchasedShowPrice = false
+houseLoseAfterInactivity = 30 -- days; 0 = never
 onlyInvitedCanMoveHouseItems = true
 togglehouseTransferOnRestart = true
 
@@ -290,7 +307,7 @@ pushWhenAttacking = false
 -- NOTE: If a map with the name already exists in the world folder, the map will not be downloaded even if the toggleDownloadMap is true
 toggleDownloadMap = true
 mapName = "otservbr"
-mapDownloadUrl = "https://github.com/opentibiabr/canary/releases/download/v1.5.0/otservbr.otbm"
+mapDownloadUrl = "https://github.com/opentibiabr/canary/releases/download/v3.0.0/otservbr.otbm"
 mapAuthor = "OpenTibiaBR"
 
 -- Party List limitations
@@ -463,6 +480,7 @@ vipBonusSkill = 0
 vipAutoLootVipOnly = false
 vipStayOnline = false
 vipFamiliarTimeCooldownReduction = 0
+vipKeepHouse = false
 
 -- NOTE: set rewardChestCollectEnabled to true to enable the reward collect system
 -- NOTE set rewardChestMaxCollectItems max items per collect action

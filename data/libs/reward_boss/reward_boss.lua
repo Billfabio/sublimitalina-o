@@ -54,15 +54,21 @@ end
 
 function Container:addRewardBossItems(itemList)
 	for itemId, lootInfo in pairs(itemList) do
-		local itemType = ItemType(itemId)
-		if itemType then
+		local iType = ItemType(itemId)
+		if iType then
 			local itemCount = lootInfo.count
-			local charges = itemType:getCharges()
+			local charges = iType:getCharges()
 			if charges > 0 then
 				itemCount = charges
-				logger.debug("Adding item with 'id' to the reward container, item charges {}", itemType:getId(), charges)
+				logger.debug("Adding item with 'id' to the reward container, item charges {}", iType:getId(), charges)
 			end
-			self:addItem(itemId, itemCount)
+			if iType:isStackable() or iType:getCharges() ~= 0 then
+				self:addItem(itemId, itemCount, INDEX_WHEREEVER, FLAG_NOLIMIT)
+			else
+				for i = 1, itemCount do
+					self:addItem(itemId, 1, INDEX_WHEREEVER, FLAG_NOLIMIT)
+				end
+			end
 		end
 	end
 end
@@ -90,14 +96,14 @@ function InsertRewardItems(playerGuid, timestamp, itemList)
 end
 
 function GetPlayerStats(bossId, playerGuid, autocreate)
-	local ret = GlobalBosses[bossId][playerGuid]
+	local ret = _G.GlobalBosses[bossId][playerGuid]
 	if not ret and autocreate then
 		ret = {
 			bossId = bossId,
 			damageIn = 0, -- damage taken from the boss
 			healing = 0, -- healing (other players) done
 		}
-		GlobalBosses[bossId][playerGuid] = ret
+		_G.GlobalBosses[bossId][playerGuid] = ret
 		return ret
 	end
 	return ret
@@ -109,7 +115,7 @@ function ResetAndSetTargetList(creature)
 	end
 
 	local bossId = creature:getId()
-	local info = GlobalBosses[bossId]
+	local info = _G.GlobalBosses[bossId]
 	-- Reset all players' status
 	for _, player in pairs(info) do
 		player.active = false

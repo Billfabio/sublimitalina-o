@@ -4,7 +4,6 @@ local config = {
 		position = Position(33488, 31441, 13),
 	},
 	requiredLevel = 250,
-
 	playerPositions = {
 		{ pos = Position(33516, 31444, 13), teleport = Position(33488, 31430, 13), effect = CONST_ME_TELEPORT },
 		{ pos = Position(33517, 31444, 13), teleport = Position(33488, 31430, 13), effect = CONST_ME_TELEPORT },
@@ -17,7 +16,6 @@ local config = {
 		to = Position(33497, 31446, 13),
 	},
 	exit = Position(33261, 31986, 8),
-	storage = Storage.Quest.U12_20.GraveDanger.Bosses.EarlOsamTimer,
 }
 
 local lever = BossLever(config)

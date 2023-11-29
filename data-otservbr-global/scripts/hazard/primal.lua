@@ -3,8 +3,6 @@ local hazard = Hazard.new({
 	from = Position(33502, 32740, 13),
 	to = Position(33796, 32996, 15),
 	maxLevel = 12,
-	storageMax = Storage.Quest.U12_90.PrimalOrdeal.Hazard.Max,
-	storageCurrent = Storage.Quest.U12_90.PrimalOrdeal.Hazard.Current,
 
 	crit = true,
 	dodge = true,
@@ -82,8 +80,14 @@ function createPrimalPod(position)
 	end
 end
 
-local primalKill = CreatureEvent("PrimalHazardKill")
-function primalKill.onKill(_player, creature)
+local spawnEvent = ZoneEvent(hazardZone)
+function spawnEvent.onSpawn(monster, position)
+	monster:registerEvent("PrimalHazardDeath")
+end
+spawnEvent:register()
+
+local deathEvent = CreatureEvent("PrimalHazardDeath")
+function deathEvent.onDeath(creature)
 	if not configManager.getBoolean(configKeys.TOGGLE_HAZARDSYSTEM) then
 		return true
 	end
@@ -123,4 +127,4 @@ function primalKill.onKill(_player, creature)
 	return true
 end
 
-primalKill:register()
+deathEvent:register()
