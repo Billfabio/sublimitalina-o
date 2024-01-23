@@ -59,6 +59,10 @@ public:
 		return static_self_cast<Container>();
 	}
 
+	std::shared_ptr<Cylinder> getCylinder() override final {
+		return getContainer();
+	}
+
 	std::shared_ptr<Container> getRootContainer();
 
 	virtual std::shared_ptr<DepotLocker> getDepotLocker() {
@@ -82,6 +86,8 @@ public:
 	Attr_ReadValue readAttr(AttrTypes_t attr, PropStream &propStream) override;
 	bool unserializeItemNode(OTB::Loader &loader, const OTB::Node &node, PropStream &propStream, Position &itemPosition) override;
 	std::string getContentDescription(bool oldProtocol);
+
+	uint32_t getMaxCapacity() const;
 
 	size_t size() const {
 		return itemlist.size();
@@ -164,6 +170,8 @@ public:
 	void stopDecaying() override;
 
 	virtual void removeItem(std::shared_ptr<Thing> thing, bool sendUpdateToClient = false);
+
+	uint32_t getOwnerId() const override final;
 
 	bool isAnyKindOfRewardChest();
 	bool isAnyKindOfRewardContainer();

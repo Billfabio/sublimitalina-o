@@ -61,6 +61,16 @@ int CanaryServer::run() {
 				loadConfigLua();
 
 				logger.info("Server protocol: {}.{}{}", CLIENT_VERSION_UPPER, CLIENT_VERSION_LOWER, g_configManager().getBoolean(OLD_PROTOCOL, __FUNCTION__) ? " and 10x allowed!" : "");
+				metrics::Options metricsOptions;
+				metricsOptions.enablePrometheusExporter = g_configManager().getBoolean(METRICS_ENABLE_PROMETHEUS, __FUNCTION__);
+				if (metricsOptions.enablePrometheusExporter) {
+					metricsOptions.prometheusOptions.url = g_configManager().getString(METRICS_PROMETHEUS_ADDRESS, __FUNCTION__);
+				}
+				metricsOptions.enableOStreamExporter = g_configManager().getBoolean(METRICS_ENABLE_OSTREAM, __FUNCTION__);
+				if (metricsOptions.enableOStreamExporter) {
+					metricsOptions.ostreamOptions.export_interval_millis = std::chrono::milliseconds(g_configManager().getNumber(METRICS_OSTREAM_INTERVAL, __FUNCTION__));
+				}
+				g_metrics().init(metricsOptions);
 
 				rsa.start();
 				initializeDatabase();
@@ -92,10 +102,10 @@ int CanaryServer::run() {
 				if (g_configManager().getBoolean(TOGGLE_MAINTAIN_MODE, __FUNCTION__)) {
 					g_game().setGameState(GAME_STATE_CLOSED);
 					g_logger().warn("Initialized in maintain mode!");
-					g_webhook().sendMessage("Server is now online", "The server is now online. Access is currently restricted to administrators only.", WEBHOOK_COLOR_ONLINE);
+					g_webhook().sendMessage(":yellow_square: Server is now **online** _(access restricted to staff)_");
 				} else {
 					g_game().setGameState(GAME_STATE_NORMAL);
-					g_webhook().sendMessage("Server is now online", "Server has successfully started.", WEBHOOK_COLOR_ONLINE);
+					g_webhook().sendMessage(":green_circle: Server is now **online**");
 				}
 
 				loaderStatus = LoaderStatus::LOADED;
@@ -208,7 +218,7 @@ void CanaryServer::logInfos() {
 /**
  *It is preferable to keep the close button off as it closes the server without saving (this can cause the player to lose items from houses and others informations, since windows automatically closes the process in five seconds, when forcing the close)
  * Choose to use "CTROL + C" or "CTROL + BREAK" for security close
- * To activate/desactivate window;
+ * To activate/deactivate window;
  * \param MF_GRAYED Disable the "x" (force close) button
  * \param MF_ENABLED Enable the "x" (force close) button
  */
@@ -373,6 +383,7 @@ void CanaryServer::modulesLoadHelper(bool loaded, std::string moduleName) {
 }
 
 void CanaryServer::shutdown() {
-	inject<ThreadPool>().shutdown();
 	g_dispatcher().shutdown();
+	g_metrics().shutdown();
+	inject<ThreadPool>().shutdown();
 }

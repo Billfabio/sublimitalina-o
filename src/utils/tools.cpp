@@ -470,12 +470,12 @@ std::time_t getTimeNow() {
 	return std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 }
 
-std::time_t getTimeMsNow() {
+int64_t getTimeMsNow() {
 	auto duration = std::chrono::system_clock::now().time_since_epoch();
 	return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 }
 
-std::time_t getTimeUsNow() {
+int64_t getTimeUsNow() {
 	auto duration = std::chrono::system_clock::now().time_since_epoch();
 	return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
 }
@@ -1209,7 +1209,7 @@ const char* getReturnMessage(ReturnValue value) {
 		case RETURNVALUE_DESTINATIONOUTOFREACH:
 			return "Destination is out of reach.";
 
-		case RETURNVALUE_NOTMOVEABLE:
+		case RETURNVALUE_NOTMOVABLE:
 			return "You cannot move this object.";
 
 		case RETURNVALUE_DROPTWOHANDEDITEM:
@@ -1448,6 +1448,12 @@ const char* getReturnMessage(ReturnValue value) {
 		case RETURNVALUE_CONTACTADMINISTRATOR:
 			return "An error has occurred, please contact your administrator.";
 
+		case RETURNVALUE_ITEMISNOTYOURS:
+			return "This item is not yours.";
+
+		case RETURNVALUE_ITEMUNTRADEABLE:
+			return "This item is untradeable.";
+
 		// Any unhandled ReturnValue will go enter here
 		default:
 			return "Unknown error.";
@@ -1525,7 +1531,7 @@ NameEval_t validateName(const std::string &name) {
 	std::istream_iterator<std::string> end;
 	std::copy(begin, end, std::back_inserter(toks));
 
-	if (name.length() < 3 || name.length() > 14) {
+	if (name.length() < 3 || name.length() > 18) {
 		return INVALID_LENGTH;
 	}
 
@@ -1598,8 +1604,6 @@ std::string getObjectCategoryName(ObjectCategory_t category) {
 			return "Tibia Coins";
 		case OBJECTCATEGORY_CREATUREPRODUCTS:
 			return "Creature Products";
-		case OBJECTCATEGORY_STASHRETRIEVE:
-			return "Stash Retrieve";
 		case OBJECTCATEGORY_GOLD:
 			return "Gold";
 		case OBJECTCATEGORY_DEFAULT:
@@ -1802,4 +1806,20 @@ std::string toKey(const std::string &str) {
 	std::replace(key.begin(), key.end(), ' ', '-');
 	key.erase(std::remove_if(key.begin(), key.end(), [](char c) { return std::isspace(c); }), key.end());
 	return key;
+}
+
+uint8_t convertWheelGemAffinityToDomain(uint8_t affinity) {
+	switch (affinity) {
+		case 0:
+			return 1;
+		case 1:
+			return 3;
+		case 2:
+			return 0;
+		case 3:
+			return 2;
+		default:
+			g_logger().error("Failed to get gem affinity {}", affinity);
+			return 0;
+	}
 }

@@ -31,6 +31,7 @@
 #include "items/weapons/weapons.hpp"
 #include "core.hpp"
 #include "map/spectators.hpp"
+#include "lib/metrics/metrics.hpp"
 
 MuteCountMap Player::muteCountMap;
 
@@ -158,21 +159,21 @@ std::string Player::getDescription(int32_t lookDistance) {
 		}
 	}
 
-	if (party) {
+	if (m_party) {
 		if (lookDistance == -1) {
 			s << " Your party has ";
 		} else {
 			s << " " << subjectPronoun << " " << getSubjectVerb() << " in a party with ";
 		}
 
-		size_t memberCount = party->getMemberCount() + 1;
+		size_t memberCount = m_party->getMemberCount() + 1;
 		if (memberCount == 1) {
 			s << "1 member and ";
 		} else {
 			s << memberCount << " members and ";
 		}
 
-		size_t invitationCount = party->getInvitationCount();
+		size_t invitationCount = m_party->getInvitationCount();
 		if (invitationCount == 1) {
 			s << "1 pending invitation.";
 		} else {
@@ -338,7 +339,7 @@ int32_t Player::getWeaponSkill(std::shared_ptr<Item> item) const {
 int32_t Player::getArmor() const {
 	int32_t armor = 0;
 
-	static const Slots_t armorSlots[] = { CONST_SLOT_HEAD, CONST_SLOT_NECKLACE, CONST_SLOT_ARMOR, CONST_SLOT_LEGS, CONST_SLOT_FEET, CONST_SLOT_RING };
+	static const Slots_t armorSlots[] = { CONST_SLOT_HEAD, CONST_SLOT_NECKLACE, CONST_SLOT_ARMOR, CONST_SLOT_LEGS, CONST_SLOT_FEET, CONST_SLOT_RING, CONST_SLOT_AMMO };
 	for (Slots_t slot : armorSlots) {
 		std::shared_ptr<Item> inventoryItem = inventory[slot];
 		if (inventoryItem) {
@@ -843,7 +844,7 @@ uint16_t Player::getContainerIndex(uint8_t cid) const {
 }
 
 bool Player::canOpenCorpse(uint32_t ownerId) const {
-	return getID() == ownerId || (party && party->canOpenCorpse(ownerId));
+	return getID() == ownerId || (m_party && m_party->canOpenCorpse(ownerId));
 }
 
 uint16_t Player::getLookCorpse() const {
@@ -1023,79 +1024,114 @@ void Player::onReceiveMail() {
 	}
 }
 
-std::shared_ptr<Container> Player::setLootContainer(ObjectCategory_t category, std::shared_ptr<Container> container, bool loading /* = false*/) {
+std::shared_ptr<Container> Player::refreshManagedContainer(ObjectCategory_t category, std::shared_ptr<Container> container, bool isLootContainer, bool loading /* = false*/) {
 	std::shared_ptr<Container> previousContainer = nullptr;
-	if (auto it = quickLootContainers.find(category);
-		it != quickLootContainers.end() && !loading) {
-		previousContainer = (*it).second;
-		auto flags = previousContainer->getAttribute<int64_t>(ItemAttribute_t::QUICKLOOTCONTAINER);
-		flags &= ~(1 << category);
-		if (flags == 0) {
-			previousContainer->removeAttribute(ItemAttribute_t::QUICKLOOTCONTAINER);
-		} else {
-			previousContainer->setAttribute(ItemAttribute_t::QUICKLOOTCONTAINER, flags);
+	auto toSetAttribute = isLootContainer ? ItemAttribute_t::QUICKLOOTCONTAINER : ItemAttribute_t::OBTAINCONTAINER;
+	if (auto it = m_managedContainers.find(category); it != m_managedContainers.end() && !loading) {
+		previousContainer = isLootContainer ? it->second.first : it->second.second;
+		if (previousContainer) {
+			auto flags = previousContainer->getAttribute<uint32_t>(toSetAttribute);
+			flags &= ~(1 << category);
+			if (flags == 0) {
+				previousContainer->removeAttribute(toSetAttribute);
+			} else {
+				previousContainer->setAttribute(toSetAttribute, flags);
+			}
 		}
 
-		quickLootContainers.erase(it);
+		if (isLootContainer) {
+			it->second.first = nullptr;
+		} else {
+			it->second.second = nullptr;
+		}
+
+		if (!it->second.first && !it->second.second) {
+			m_managedContainers.erase(it);
+		}
 	}
+
 	if (container) {
 		previousContainer = container;
-		quickLootContainers[category] = container;
+		if (m_managedContainers.find(category) != m_managedContainers.end()) {
+			if (isLootContainer) {
+				m_managedContainers[category].first = container;
+			} else {
+				m_managedContainers[category].second = container;
+			}
+		} else {
+			std::pair<std::shared_ptr<Container>, std::shared_ptr<Container>> newPair;
+			if (isLootContainer) {
+				newPair.first = container;
+				newPair.second = nullptr;
+			} else {
+				newPair.first = nullptr;
+				newPair.second = container;
+			}
+			m_managedContainers[category] = newPair;
+		}
 
 		if (!loading) {
-			auto flags = container->getAttribute<int64_t>(ItemAttribute_t::QUICKLOOTCONTAINER);
-			auto sendAttribute = flags | 1 << category;
-			container->setAttribute(ItemAttribute_t::QUICKLOOTCONTAINER, sendAttribute);
+			auto flags = container->getAttribute<uint32_t>(toSetAttribute);
+			auto sendAttribute = flags | (1 << category);
+			container->setAttribute(toSetAttribute, sendAttribute);
 		}
-		return previousContainer;
 	}
 
-	return nullptr;
+	return previousContainer;
 }
 
-std::shared_ptr<Container> Player::getLootContainer(ObjectCategory_t category) const {
+std::shared_ptr<Container> Player::getManagedContainer(ObjectCategory_t category, bool isLootContainer) const {
 	if (category != OBJECTCATEGORY_DEFAULT && !isPremium()) {
 		category = OBJECTCATEGORY_DEFAULT;
 	}
 
-	auto it = quickLootContainers.find(category);
-	if (it != quickLootContainers.end()) {
-		return (*it).second;
+	auto it = m_managedContainers.find(category);
+	std::shared_ptr<Container> container = nullptr;
+	if (it != m_managedContainers.end()) {
+		container = isLootContainer ? it->second.first : it->second.second;
 	}
 
-	if (category != OBJECTCATEGORY_DEFAULT) {
+	if (!container && category != OBJECTCATEGORY_DEFAULT) {
 		// firstly, fallback to default
-		return getLootContainer(OBJECTCATEGORY_DEFAULT);
+		container = getManagedContainer(OBJECTCATEGORY_DEFAULT, isLootContainer);
 	}
 
-	return nullptr;
+	return container;
 }
 
-void Player::checkLootContainers(std::shared_ptr<Item> item) {
-	if (!item) {
-		return;
-	}
-
-	std::shared_ptr<Container> container = item->getContainer();
+void Player::checkLootContainers(std::shared_ptr<Container> container) {
 	if (!container) {
 		return;
 	}
 
 	bool shouldSend = false;
-
-	auto it = quickLootContainers.begin();
-	while (it != quickLootContainers.end()) {
-		std::shared_ptr<Container> lootContainer = (*it).second;
-
-		bool remove = false;
-		if (item->getHoldingPlayer() != getPlayer() && (item == lootContainer || container->isHoldingItem(lootContainer))) {
-			remove = true;
+	for (auto it = m_managedContainers.begin(); it != m_managedContainers.end();) {
+		std::shared_ptr<Container> &lootContainer = it->second.first;
+		std::shared_ptr<Container> &obtainContainer = it->second.second;
+		bool removeLoot = false;
+		bool removeObtain = false;
+		if (lootContainer && container->getHoldingPlayer() != getPlayer() && (container == lootContainer || container->isHoldingItem(lootContainer))) {
+			removeLoot = true;
+			shouldSend = true;
+			lootContainer->removeAttribute(ItemAttribute_t::QUICKLOOTCONTAINER);
 		}
 
-		if (remove) {
+		if (obtainContainer && container->getHoldingPlayer() != getPlayer() && (container == obtainContainer || container->isHoldingItem(obtainContainer))) {
+			removeObtain = true;
 			shouldSend = true;
-			it = quickLootContainers.erase(it);
-			lootContainer->removeAttribute(ItemAttribute_t::QUICKLOOTCONTAINER);
+			obtainContainer->removeAttribute(ItemAttribute_t::OBTAINCONTAINER);
+		}
+
+		if (removeLoot) {
+			lootContainer.reset();
+		}
+
+		if (removeObtain) {
+			obtainContainer.reset();
+		}
+
+		if (!lootContainer && !obtainContainer) {
+			it = m_managedContainers.erase(it);
 		} else {
 			++it;
 		}
@@ -1106,13 +1142,51 @@ void Player::checkLootContainers(std::shared_ptr<Item> item) {
 	}
 }
 
+void Player::setMainBackpackUnassigned(std::shared_ptr<Container> container) {
+	if (!container) {
+		return;
+	}
+
+	// Update containers
+	bool toSendInventoryUpdate = false;
+	for (bool isLootContainer : { true, false }) {
+		std::shared_ptr<Container> managedContainer = getManagedContainer(OBJECTCATEGORY_DEFAULT, isLootContainer);
+		if (!managedContainer) {
+			refreshManagedContainer(OBJECTCATEGORY_DEFAULT, container, isLootContainer);
+			toSendInventoryUpdate = true;
+		}
+	}
+
+	if (toSendInventoryUpdate) {
+		sendInventoryItem(CONST_SLOT_BACKPACK, container);
+		sendLootContainers();
+	}
+}
+
 void Player::sendLootStats(std::shared_ptr<Item> item, uint8_t count) {
+	uint64_t value = 0;
+	if (item->getID() == ITEM_GOLD_COIN || item->getID() == ITEM_PLATINUM_COIN || item->getID() == ITEM_CRYSTAL_COIN) {
+		if (item->getID() == ITEM_PLATINUM_COIN) {
+			value = count * 100;
+		} else if (item->getID() == ITEM_CRYSTAL_COIN) {
+			value = count * 10000;
+		} else {
+			value = count;
+		}
+	} else if (
+		auto npc = g_game().getNpcByName("The Lootmonger")
+	) {
+		const auto &iType = Item::items.getItemType(item->getID());
+		value = iType.sellPrice * count;
+	}
+	g_metrics().addCounter("player_loot", value, { { "player", getName() } });
+
 	if (client) {
 		client->sendLootStats(item, count);
 	}
 
-	if (party) {
-		party->addPlayerLoot(getPlayer(), item);
+	if (m_party) {
+		m_party->addPlayerLoot(getPlayer(), item);
 	}
 }
 
@@ -1256,12 +1330,16 @@ void Player::sendStats() {
 }
 
 void Player::updateSupplyTracker(std::shared_ptr<Item> item) {
+	const auto &iType = Item::items.getItemType(item->getID());
+	auto value = iType.buyPrice;
+	g_metrics().addCounter("player_supply", value, { { "player", getName() } });
+
 	if (client) {
 		client->sendUpdateSupplyTracker(item);
 	}
 
-	if (party) {
-		party->addPlayerSupply(getPlayer(), item);
+	if (m_party) {
+		m_party->addPlayerSupply(getPlayer(), item);
 	}
 }
 
@@ -1382,6 +1460,8 @@ void Player::onApplyImbuement(Imbuement* imbuement, std::shared_ptr<Item> item, 
 		return;
 	}
 
+	g_metrics().addCounter("balance_decrease", price, { { "player", getName() }, { "context", "apply_imbuement" } });
+
 	for (auto &[key, value] : items) {
 		std::stringstream withdrawItemMessage;
 
@@ -1444,6 +1524,7 @@ void Player::onClearImbuement(std::shared_ptr<Item> item, uint8_t slot) {
 		this->openImbuementWindow(item);
 		return;
 	}
+	g_metrics().addCounter("balance_decrease", baseImbuement->removeCost, { { "player", getName() }, { "context", "clear_imbuement" } });
 
 	if (item->getParent() == getPlayer()) {
 		removeItemImbuementStats(imbuementInfo.imbuement);
@@ -1596,7 +1677,7 @@ void Player::onRemoveTileItem(std::shared_ptr<Tile> fromTile, const Position &po
 		}
 	}
 
-	checkLootContainers(item);
+	checkLootContainers(item->getContainer());
 }
 
 void Player::onCreatureAppear(std::shared_ptr<Creature> creature, bool isLogin) {
@@ -1660,6 +1741,12 @@ void Player::onCreatureAppear(std::shared_ptr<Creature> creature, bool isLogin) 
 			}
 			sendBlessStatus();
 		}
+
+		if (getCurrentMount() != 0) {
+			toggleMount(true);
+		}
+
+		g_game().changePlayerSpeed(static_self_cast<Player>(), 0);
 	}
 }
 
@@ -1692,6 +1779,12 @@ void Player::onChangeZone(ZoneType_t zone) {
 			wasMounted = true;
 		}
 	} else {
+		int32_t ticks = g_configManager().getNumber(STAIRHOP_DELAY, __FUNCTION__);
+		if (ticks > 0) {
+			if (const auto &condition = Condition::createCondition(CONDITIONID_DEFAULT, CONDITION_PACIFIED, ticks, 0)) {
+				addCondition(condition);
+			}
+		}
 		if (wasMounted) {
 			toggleMount(true);
 			wasMounted = false;
@@ -1739,8 +1832,8 @@ void Player::onRemoveCreature(std::shared_ptr<Creature> creature, bool isLogout)
 
 	if (auto player = getPlayer(); player == creature) {
 		if (isLogout) {
-			if (party) {
-				party->leaveParty(player);
+			if (m_party) {
+				m_party->leaveParty(player);
 			}
 			if (guild) {
 				guild->removeMember(player);
@@ -1864,9 +1957,9 @@ void Player::onCreatureMove(const std::shared_ptr<Creature> &creature, const std
 		inMarket = false;
 	}
 
-	if (party) {
-		party->updateSharedExperience();
-		party->updatePlayerStatus(getPlayer(), oldPos, newPos);
+	if (m_party) {
+		m_party->updateSharedExperience();
+		m_party->updatePlayerStatus(getPlayer(), oldPos, newPos);
 	}
 
 	if (teleport || oldPos.z != newPos.z) {
@@ -1905,7 +1998,7 @@ void Player::onRemoveContainerItem(std::shared_ptr<Container> container, std::sh
 		}
 	}
 
-	checkLootContainers(item);
+	checkLootContainers(item->getContainer());
 }
 
 void Player::onCloseContainer(std::shared_ptr<Container> container) {
@@ -1957,7 +2050,7 @@ void Player::onRemoveInventoryItem(std::shared_ptr<Item> item) {
 		}
 	}
 
-	checkLootContainers(item);
+	checkLootContainers(item->getContainer());
 }
 
 void Player::checkTradeState(std::shared_ptr<Item> item) {
@@ -2071,12 +2164,14 @@ void Player::onThink(uint32_t interval) {
 		addMessageBuffer();
 	}
 
+	// Transcendance (avatar trigger)
+	triggerTranscendance();
 	// Momentum (cooldown resets)
 	triggerMomentum();
 	auto playerTile = getTile();
 	const bool vipStaysOnline = isVip() && g_configManager().getBoolean(VIP_STAY_ONLINE, __FUNCTION__);
+	idleTime += interval;
 	if (playerTile && !playerTile->hasFlag(TILESTATE_NOLOGOUT) && !isAccessPlayer() && !isExerciseTraining() && !vipStaysOnline) {
-		idleTime += interval;
 		const int32_t kickAfterMinutes = g_configManager().getNumber(KICK_AFTER_MINUTES, __FUNCTION__);
 		if (idleTime > (kickAfterMinutes * 60000) + 60000) {
 			removePlayer(true);
@@ -2236,11 +2331,21 @@ void Player::addExperience(std::shared_ptr<Creature> target, uint64_t exp, bool 
 		return;
 	}
 
+	auto rate = exp / rawExp;
+	std::map<std::string, std::string> attrs({ { "player", getName() }, { "level", std::to_string(getLevel()) }, { "rate", std::to_string(rate) } });
+	if (sendText) {
+		g_metrics().addCounter("player_experience_raw", rawExp, attrs);
+		g_metrics().addCounter("player_experience_actual", exp, attrs);
+	} else {
+		g_metrics().addCounter("player_experience_bonus_raw", rawExp, attrs);
+		g_metrics().addCounter("player_experience_bonus_actual", exp, attrs);
+	}
+
 	// Hazard system experience
 	std::shared_ptr<Monster> monster = target && target->getMonster() ? target->getMonster() : nullptr;
 	bool handleHazardExperience = monster && monster->getHazard() && getHazardSystemPoints() > 0;
 	if (handleHazardExperience) {
-		exp += (exp * (1.75 * getHazardSystemPoints() * g_configManager().getNumber(HAZARD_EXP_BONUS_MULTIPLIER, __FUNCTION__))) / 100.;
+		exp += (exp * (1.75 * getHazardSystemPoints() * g_configManager().getFloat(HAZARD_EXP_BONUS_MULTIPLIER, __FUNCTION__))) / 100.;
 	}
 
 	experience += exp;
@@ -2308,8 +2413,8 @@ void Player::addExperience(std::shared_ptr<Creature> target, uint64_t exp, bool 
 		g_game().addCreatureHealth(static_self_cast<Player>());
 		g_game().addPlayerMana(static_self_cast<Player>());
 
-		if (party) {
-			party->updateSharedExperience();
+		if (m_party) {
+			m_party->updateSharedExperience();
 		}
 
 		g_creatureEvents().playerAdvance(static_self_cast<Player>(), SKILL_LEVEL, prevLevel, level);
@@ -2394,8 +2499,8 @@ void Player::removeExperience(uint64_t exp, bool sendText /* = false*/) {
 		g_game().addCreatureHealth(static_self_cast<Player>());
 		g_game().addPlayerMana(static_self_cast<Player>());
 
-		if (party) {
-			party->updateSharedExperience();
+		if (m_party) {
+			m_party->updateSharedExperience();
 		}
 
 		std::ostringstream ss;
@@ -2433,6 +2538,10 @@ void Player::onBlockHit() {
 			addSkillAdvance(SKILL_SHIELD, 1);
 		}
 	}
+}
+
+void Player::onTakeDamage(std::shared_ptr<Creature> attacker, int32_t damage) {
+	// nothing here yet
 }
 
 void Player::onAttackedCreatureBlockHit(BlockType_t blockType) {
@@ -2695,24 +2804,28 @@ void Player::death(std::shared_ptr<Creature> lastHitCreature) {
 		}
 		sendTextMessage(MESSAGE_EVENT_ADVANCE, deathType.str());
 
-		std::string bless = getBlessingsName();
-		std::ostringstream blesses;
-		if (bless.length() == 0) {
-			blesses << "You weren't protected with any blessings.";
-		} else {
-			blesses << "You were blessed with " << bless;
-		}
-		sendTextMessage(MESSAGE_EVENT_ADVANCE, blesses.str());
+		auto adventurerBlessingLevel = g_configManager().getNumber(ADVENTURERSBLESSING_LEVEL, __FUNCTION__);
+		auto willNotLoseBless = getLevel() < adventurerBlessingLevel && getVocationId() > VOCATION_NONE;
 
-		// Make player lose bless
-		uint8_t maxBlessing = 8;
-		if (pvpDeath && hasBlessing(1)) {
-			removeBlessing(1, 1); // Remove TOF only
+		std::string bless = getBlessingsName();
+		std::ostringstream blessOutput;
+		if (willNotLoseBless) {
+			blessOutput << fmt::format("You still have adventurer's blessings for being level lower than {}!", adventurerBlessingLevel);
 		} else {
-			for (int i = 2; i <= maxBlessing; i++) {
-				removeBlessing(i, 1);
+			bless.empty() ? blessOutput << "You weren't protected with any blessings."
+						  : blessOutput << "You were blessed with " << bless;
+
+			// Make player lose bless
+			uint8_t maxBlessing = 8;
+			if (pvpDeath && hasBlessing(1)) {
+				removeBlessing(1, 1); // Remove TOF only
+			} else {
+				for (int i = 2; i <= maxBlessing; i++) {
+					removeBlessing(i, 1);
+				}
 			}
 		}
+		sendTextMessage(MESSAGE_EVENT_ADVANCE, blessOutput.str());
 
 		sendStats();
 		sendSkills();
@@ -2915,8 +3028,7 @@ void Player::notifyStatusChange(std::shared_ptr<Player> loginPlayer, VipStatus_t
 		return;
 	}
 
-	auto it = VIPList.find(loginPlayer->guid);
-	if (it == VIPList.end()) {
+	if (!VIPList.contains(loginPlayer->guid)) {
 		return;
 	}
 
@@ -2932,10 +3044,11 @@ void Player::notifyStatusChange(std::shared_ptr<Player> loginPlayer, VipStatus_t
 }
 
 bool Player::removeVIP(uint32_t vipGuid) {
-	if (VIPList.erase(vipGuid) == 0) {
+	if (!VIPList.erase(vipGuid)) {
 		return false;
 	}
 
+	VIPList.erase(vipGuid);
 	if (account) {
 		IOLoginData::removeVIPEntry(account->getID(), vipGuid);
 	}
@@ -2949,8 +3062,7 @@ bool Player::addVIP(uint32_t vipGuid, const std::string &vipName, VipStatus_t st
 		return false;
 	}
 
-	auto result = VIPList.insert(vipGuid);
-	if (!result.second) {
+	if (!VIPList.insert(vipGuid).second) {
 		sendTextMessage(MESSAGE_FAILURE, "This player is already in your list.");
 		return false;
 	}
@@ -3031,6 +3143,9 @@ ReturnValue Player::queryAdd(int32_t index, const std::shared_ptr<Thing> &thing,
 	if (item == nullptr) {
 		g_logger().error("[Player::queryAdd] - Item is nullptr");
 		return RETURNVALUE_NOTPOSSIBLE;
+	}
+	if (item->hasOwner() && !item->isOwner(getPlayer())) {
+		return RETURNVALUE_ITEMISNOTYOURS;
 	}
 
 	bool childIsOwner = hasBitSet(FLAG_CHILDISOWNER, flags);
@@ -3322,8 +3437,8 @@ ReturnValue Player::queryRemove(const std::shared_ptr<Thing> &thing, uint32_t co
 		return RETURNVALUE_NOTPOSSIBLE;
 	}
 
-	if (!item->isMoveable() && !hasBitSet(FLAG_IGNORENOTMOVEABLE, flags)) {
-		return RETURNVALUE_NOTMOVEABLE;
+	if (!item->isMovable() && !hasBitSet(FLAG_IGNORENOTMOVABLE, flags)) {
+		return RETURNVALUE_NOTMOVABLE;
 	}
 
 	return RETURNVALUE_NOERROR;
@@ -4255,7 +4370,8 @@ void Player::doAttacking(uint32_t) {
 		}
 
 		if (result) {
-			lastAttack = OTSYS_TIME();
+			updateLastAggressiveAction();
+			updateLastAttack();
 		}
 	}
 }
@@ -4358,6 +4474,7 @@ void Player::onAddCondition(ConditionType_t type) {
 
 	if (type == CONDITION_OUTFIT && isMounted()) {
 		dismount();
+		wasMounted = true;
 	}
 
 	sendIcons();
@@ -4429,6 +4546,10 @@ void Player::onEndCondition(ConditionType_t type) {
 		if (getSkull() != SKULL_RED && getSkull() != SKULL_BLACK) {
 			setSkull(SKULL_NONE);
 		}
+	}
+
+	if (type == CONDITION_OUTFIT && wasMounted) {
+		toggleMount(true);
 	}
 
 	sendIcons();
@@ -4520,8 +4641,8 @@ void Player::onAttacked() {
 void Player::onIdleStatus() {
 	Creature::onIdleStatus();
 
-	if (party) {
-		party->clearPlayerPoints(static_self_cast<Player>());
+	if (m_party) {
+		m_party->clearPlayerPoints(static_self_cast<Player>());
 	}
 }
 
@@ -4538,18 +4659,18 @@ void Player::onAttackedCreatureDrainHealth(std::shared_ptr<Creature> target, int
 	Creature::onAttackedCreatureDrainHealth(target, points);
 
 	if (target) {
-		if (party && !Combat::isPlayerCombat(target)) {
+		if (m_party && !Combat::isPlayerCombat(target)) {
 			auto tmpMonster = target->getMonster();
 			if (tmpMonster && tmpMonster->isHostile()) {
 				// We have fulfilled a requirement for shared experience
-				party->updatePlayerTicks(static_self_cast<Player>(), points);
+				m_party->updatePlayerTicks(static_self_cast<Player>(), points);
 			}
 		}
 	}
 }
 
 void Player::onTargetCreatureGainHealth(std::shared_ptr<Creature> target, int32_t points) {
-	if (target && party) {
+	if (target && m_party) {
 		std::shared_ptr<Player> tmpPlayer = nullptr;
 
 		if (isPartner(tmpPlayer) && (tmpPlayer != getPlayer())) {
@@ -4561,7 +4682,7 @@ void Player::onTargetCreatureGainHealth(std::shared_ptr<Creature> target, int32_
 		}
 
 		if (isPartner(tmpPlayer)) {
-			party->updatePlayerTicks(static_self_cast<Player>(), points);
+			m_party->updatePlayerTicks(static_self_cast<Player>(), points);
 		}
 	}
 }
@@ -4577,8 +4698,7 @@ bool Player::onKilledPlayer(const std::shared_ptr<Player> &target, bool lastHit)
 				for (auto &kill : target->unjustifiedKills) {
 					if (kill.target == getGUID() && kill.unavenged) {
 						kill.unavenged = false;
-						auto it = attackedSet.find(target->guid);
-						attackedSet.erase(it);
+						attackedSet.erase(target->guid);
 						break;
 					}
 				}
@@ -4640,7 +4760,7 @@ bool Player::onKilledMonster(const std::shared_ptr<Monster> &monster) {
 	if (hasFlag(PlayerFlags_t::NotGenerateLoot)) {
 		monster->setDropLoot(false);
 	}
-	if (monster->isSummon()) {
+	if (monster->hasBeenSummoned()) {
 		return false;
 	}
 	auto mType = monster->getMonsterType();
@@ -4663,8 +4783,8 @@ void Player::onGainExperience(uint64_t gainExp, std::shared_ptr<Creature> target
 		return;
 	}
 
-	if (target && !target->getPlayer() && party && party->isSharedExperienceActive() && party->isSharedExperienceEnabled()) {
-		party->shareExperience(gainExp, target);
+	if (target && !target->getPlayer() && m_party && m_party->isSharedExperienceActive() && m_party->isSharedExperienceEnabled()) {
+		m_party->shareExperience(gainExp, target);
 		// We will get a share of the experience through the sharing mechanism
 		return;
 	}
@@ -4964,7 +5084,7 @@ Skulls_t Player::getSkullClient(std::shared_ptr<Creature> creature) {
 			return SKULL_YELLOW;
 		}
 
-		if (party && party == player->party) {
+		if (m_party && m_party == player->m_party) {
 			return SKULL_GREEN;
 		}
 	}
@@ -4986,7 +5106,7 @@ bool Player::hasAttacked(std::shared_ptr<Player> attacked) const {
 		return false;
 	}
 
-	return attackedSet.find(attacked->guid) != attackedSet.end();
+	return attackedSet.contains(attacked->guid);
 }
 
 void Player::addAttacked(std::shared_ptr<Player> attacked) {
@@ -4994,7 +5114,7 @@ void Player::addAttacked(std::shared_ptr<Player> attacked) {
 		return;
 	}
 
-	attackedSet.insert(attacked->guid);
+	attackedSet.emplace(attacked->guid);
 }
 
 void Player::removeAttacked(std::shared_ptr<Player> attacked) {
@@ -5002,10 +5122,7 @@ void Player::removeAttacked(std::shared_ptr<Player> attacked) {
 		return;
 	}
 
-	auto it = attackedSet.find(attacked->guid);
-	if (it != attackedSet.end()) {
-		attackedSet.erase(it);
-	}
+	attackedSet.erase(attacked->guid);
 }
 
 void Player::clearAttacked() {
@@ -5292,6 +5409,10 @@ int32_t Player::getPerfectShotDamage(uint8_t range, bool useCharges) const {
 			continue;
 		}
 
+		if (!itemType.abilities->perfectShotRange) {
+			continue;
+		}
+
 		if (itemType.abilities->perfectShotRange == range) {
 			result += itemType.abilities->perfectShotDamage;
 			uint16_t charges = item->getCharges();
@@ -5418,14 +5539,14 @@ PartyShields_t Player::getPartyShield(std::shared_ptr<Player> player) {
 		return SHIELD_NONE;
 	}
 
-	if (party) {
-		if (party->getLeader() == player) {
-			if (party->isSharedExperienceActive()) {
-				if (party->isSharedExperienceEnabled()) {
+	if (m_party) {
+		if (m_party->getLeader() == player) {
+			if (m_party->isSharedExperienceActive()) {
+				if (m_party->isSharedExperienceEnabled()) {
 					return SHIELD_YELLOW_SHAREDEXP;
 				}
 
-				if (party->canUseSharedExperience(player)) {
+				if (m_party->canUseSharedExperience(player)) {
 					return SHIELD_YELLOW_NOSHAREDEXP;
 				}
 
@@ -5435,13 +5556,13 @@ PartyShields_t Player::getPartyShield(std::shared_ptr<Player> player) {
 			return SHIELD_YELLOW;
 		}
 
-		if (player->party == party) {
-			if (party->isSharedExperienceActive()) {
-				if (party->isSharedExperienceEnabled()) {
+		if (player->m_party == m_party) {
+			if (m_party->isSharedExperienceActive()) {
+				if (m_party->isSharedExperienceEnabled()) {
 					return SHIELD_BLUE_SHAREDEXP;
 				}
 
-				if (party->canUseSharedExperience(player)) {
+				if (m_party->canUseSharedExperience(player)) {
 					return SHIELD_BLUE_NOSHAREDEXP;
 				}
 
@@ -5460,7 +5581,7 @@ PartyShields_t Player::getPartyShield(std::shared_ptr<Player> player) {
 		return SHIELD_WHITEYELLOW;
 	}
 
-	if (player->party) {
+	if (player->m_party) {
 		return SHIELD_GRAY;
 	}
 
@@ -5468,17 +5589,17 @@ PartyShields_t Player::getPartyShield(std::shared_ptr<Player> player) {
 }
 
 bool Player::isInviting(std::shared_ptr<Player> player) const {
-	if (!player || !party || party->getLeader().get() != this) {
+	if (!player || !m_party || m_party->getLeader().get() != this) {
 		return false;
 	}
-	return party->isPlayerInvited(player);
+	return m_party->isPlayerInvited(player);
 }
 
 bool Player::isPartner(std::shared_ptr<Player> player) const {
-	if (!player || !party || player.get() == this) {
+	if (!player || !m_party || player.get() == this) {
 		return false;
 	}
-	return party == player->party;
+	return m_party == player->m_party;
 }
 
 bool Player::isGuildMate(std::shared_ptr<Player> player) const {
@@ -5575,6 +5696,14 @@ void Player::sendUnjustifiedPoints() {
 	}
 }
 
+uint8_t Player::getLastMount() const {
+	int32_t value = getStorageValue(PSTRG_MOUNTS_CURRENTMOUNT);
+	if (value > 0) {
+		return value;
+	}
+	return static_cast<uint8_t>(kv()->get("last-mount")->get<int>());
+}
+
 uint8_t Player::getCurrentMount() const {
 	int32_t value = getStorageValue(PSTRG_MOUNTS_CURRENTMOUNT);
 	if (value > 0) {
@@ -5633,7 +5762,7 @@ bool Player::toggleMount(bool mount) {
 			return false;
 		}
 
-		uint8_t currentMountId = getCurrentMount();
+		uint8_t currentMountId = getLastMount();
 		if (currentMountId == 0) {
 			sendOutfitWindow();
 			return false;
@@ -5650,6 +5779,7 @@ bool Player::toggleMount(bool mount) {
 
 		if (!hasMount(currentMount)) {
 			setCurrentMount(0);
+			kv()->set("last-mount", 0);
 			sendOutfitWindow();
 			return false;
 		}
@@ -5666,6 +5796,7 @@ bool Player::toggleMount(bool mount) {
 
 		defaultOutfit.lookMount = currentMount->clientId;
 		setCurrentMount(currentMount->id);
+		kv()->set("last-mount", currentMount->id);
 
 		if (currentMount->speed != 0) {
 			g_game().changeSpeed(static_self_cast<Player>(), currentMount->speed);
@@ -5725,6 +5856,7 @@ bool Player::untameMount(uint8_t mountId) {
 		}
 
 		setCurrentMount(0);
+		kv()->set("last-mount", 0);
 	}
 
 	return true;
@@ -5923,32 +6055,28 @@ void Player::clearModalWindows() {
 }
 
 uint16_t Player::getHelpers() const {
-	uint16_t helpers;
+	if (guild && m_party) {
+		const auto &guildMembers = guild->getMembersOnline();
 
-	if (guild && party) {
-		phmap::flat_hash_set<std::shared_ptr<Player>> helperSet;
+		stdext::vector_set<std::shared_ptr<Player>> helperSet;
+		helperSet.insert(helperSet.end(), guildMembers.begin(), guildMembers.end());
+		helperSet.insertAll(m_party->getMembers());
+		helperSet.insertAll(m_party->getInvitees());
 
-		const auto guildMembers = guild->getMembersOnline();
-		helperSet.insert(guildMembers.begin(), guildMembers.end());
+		helperSet.emplace(m_party->getLeader());
 
-		const auto partyMembers = party->getMembers();
-		helperSet.insert(partyMembers.begin(), partyMembers.end());
-
-		const auto partyInvitees = party->getInvitees();
-		helperSet.insert(partyInvitees.begin(), partyInvitees.end());
-
-		helperSet.insert(party->getLeader());
-
-		helpers = helperSet.size();
-	} else if (guild) {
-		helpers = guild->getMemberCountOnline();
-	} else if (party) {
-		helpers = party->getMemberCount() + party->getInvitationCount() + 1;
-	} else {
-		helpers = 0;
+		return static_cast<uint16_t>(helperSet.size());
 	}
 
-	return helpers;
+	if (guild) {
+		return static_cast<uint16_t>(guild->getMemberCountOnline());
+	}
+
+	if (m_party) {
+		return static_cast<uint16_t>(m_party->getMemberCount() + m_party->getInvitationCount() + 1);
+	}
+
+	return 0u;
 }
 
 void Player::sendClosePrivate(uint16_t channelId) {
@@ -6449,7 +6577,7 @@ void Player::triggerMomentum() {
 	}
 
 	double_t chance = item->getMomentumChance();
-	double_t randomChance = uniform_random(0, 10000) / 100;
+	double_t randomChance = uniform_random(0, 10000) / 100.;
 	if (getZoneType() != ZONE_PROTECTION && hasCondition(CONDITION_INFIGHT) && ((OTSYS_TIME() / 1000) % 2) == 0 && chance > 0 && randomChance < chance) {
 		bool triggered = false;
 		auto it = conditions.begin();
@@ -6488,6 +6616,32 @@ void Player::clearCooldowns() {
 			type == CONDITION_SPELLGROUPCOOLDOWN ? sendSpellGroupCooldown(static_cast<SpellGroup_t>(spellId), 0) : sendSpellCooldown(spellId, 0);
 		}
 		++it;
+	}
+}
+
+void Player::triggerTranscendance() {
+	auto item = getInventoryItem(CONST_SLOT_LEGS);
+	if (item == nullptr) {
+		return;
+	}
+
+	double_t chance = item->getTranscendenceChance();
+	double_t randomChance = uniform_random(0, 10000) / 100.;
+	if (getZoneType() != ZONE_PROTECTION && checkLastAggressiveActionWithin(2000) && ((OTSYS_TIME() / 1000) % 2) == 0 && chance > 0 && randomChance < chance) {
+		int64_t duration = g_configManager().getNumber(TRANSCENDANCE_AVATAR_DURATION, __FUNCTION__);
+		auto outfitCondition = Condition::createCondition(CONDITIONID_COMBAT, CONDITION_OUTFIT, duration, 0)->static_self_cast<ConditionOutfit>();
+		Outfit_t outfit;
+		outfit.lookType = getVocation()->getAvatarLookType();
+		outfitCondition->setOutfit(outfit);
+		addCondition(outfitCondition);
+		wheel()->setOnThinkTimer(WheelOnThink_t::AVATAR, OTSYS_TIME() + duration);
+		g_game().addMagicEffect(getPosition(), CONST_ME_AVATAR_APPEAR);
+		sendTextMessage(MESSAGE_ATTENTION, "Transcendance was triggered.");
+		sendSkills();
+		sendStats();
+		sendBasicData();
+		wheel()->sendGiftOfLifeCooldown();
+		g_game().reloadCreature(getPlayer());
 	}
 }
 
@@ -6847,35 +7001,35 @@ bool Player::saySpell(
 }
 
 // Forge system
-void Player::forgeFuseItems(uint16_t itemId, uint8_t tier, bool success, bool reduceTierLoss, uint8_t bonus, uint8_t coreCount) {
+void Player::forgeFuseItems(ForgeAction_t actionType, uint16_t firstItemId, uint8_t tier, uint16_t secondItemId, bool success, bool reduceTierLoss, bool convergence, uint8_t bonus, uint8_t coreCount) {
 	ForgeHistory history;
-	history.actionType = ForgeConversion_t::FORGE_ACTION_FUSION;
+	history.actionType = actionType;
 	history.tier = tier;
 	history.success = success;
 	history.tierLoss = reduceTierLoss;
 
-	auto firstForgingItem = getForgeItemFromId(itemId, tier);
+	auto firstForgingItem = getForgeItemFromId(firstItemId, tier);
 	if (!firstForgingItem) {
-		g_logger().error("[Log 1] Player with name {} failed to fuse item with id {}", getName(), itemId);
+		g_logger().error("[Log 1] Player with name {} failed to fuse item with id {}", getName(), firstItemId);
 		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 		return;
 	}
 	auto returnValue = g_game().internalRemoveItem(firstForgingItem, 1);
 	if (returnValue != RETURNVALUE_NOERROR) {
-		g_logger().error("[Log 1] Failed to remove forge item {} from player with name {}", itemId, getName());
+		g_logger().error("[Log 1] Failed to remove forge item {} from player with name {}", firstItemId, getName());
 		sendCancelMessage(getReturnMessage(returnValue));
 		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 		return;
 	}
-	auto secondForgingItem = getForgeItemFromId(itemId, tier);
+	auto secondForgingItem = getForgeItemFromId(secondItemId, tier);
 	if (!secondForgingItem) {
-		g_logger().error("[Log 2] Player with name {} failed to fuse item with id {}", getName(), itemId);
+		g_logger().error("[Log 2] Player with name {} failed to fuse item with id {}", getName(), secondItemId);
 		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 		return;
 	}
 	if (returnValue = g_game().internalRemoveItem(secondForgingItem, 1);
 		returnValue != RETURNVALUE_NOERROR) {
-		g_logger().error("[Log 2] Failed to remove forge item {} from player with name {}", itemId, getName());
+		g_logger().error("[Log 2] Failed to remove forge item {} from player with name {}", secondItemId, getName());
 		sendCancelMessage(getReturnMessage(returnValue));
 		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 		return;
@@ -6894,126 +7048,26 @@ void Player::forgeFuseItems(uint16_t itemId, uint8_t tier, bool success, bool re
 		return;
 	}
 
-	std::shared_ptr<Item> firstForgedItem = Item::CreateItem(itemId, 1);
+	std::shared_ptr<Item> firstForgedItem = Item::CreateItem(firstItemId, 1);
 	if (!firstForgedItem) {
-		g_logger().error("[Log 3] Player with name {} failed to fuse item with id {}", getName(), itemId);
+		g_logger().error("[Log 3] Player with name {} failed to fuse item with id {}", getName(), firstItemId);
 		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 		return;
 	}
-	firstForgedItem->setTier(tier);
 	returnValue = g_game().internalAddItem(exaltationContainer, firstForgedItem, INDEX_WHEREEVER);
 	if (returnValue != RETURNVALUE_NOERROR) {
-		g_logger().error("[Log 1] Failed to add forge item {} from player with name {}", itemId, getName());
+		g_logger().error("[Log 1] Failed to add forge item {} from player with name {}", firstItemId, getName());
 		sendCancelMessage(getReturnMessage(returnValue));
 		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 		return;
 	}
 
-	std::shared_ptr<Item> secondForgedItem = Item::CreateItem(itemId, 1);
-	if (!secondForgedItem) {
-		g_logger().error("[Log 4] Player with name {} failed to fuse item with id {}", getName(), itemId);
-		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-		return;
-	}
-
-	secondForgedItem->setTier(tier);
-	returnValue = g_game().internalAddItem(exaltationContainer, secondForgedItem, INDEX_WHEREEVER);
-	if (returnValue != RETURNVALUE_NOERROR) {
-		g_logger().error("[Log 2] Failed to add forge item {} from player with name {}", itemId, getName());
-		sendCancelMessage(getReturnMessage(returnValue));
-		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-		return;
-	}
-
-	auto dustCost = static_cast<uint64_t>(g_configManager().getNumber(FORGE_FUSION_DUST_COST, __FUNCTION__));
-	if (success) {
+	auto configKey = convergence ? FORGE_CONVERGENCE_FUSION_DUST_COST : FORGE_FUSION_DUST_COST;
+	auto dustCost = static_cast<uint64_t>(g_configManager().getNumber(configKey, __FUNCTION__));
+	if (convergence) {
 		firstForgedItem->setTier(tier + 1);
-
-		if (bonus != 1) {
-			history.dustCost = dustCost;
-			setForgeDusts(getForgeDusts() - dustCost);
-		}
-		if (bonus != 2) {
-			if (coreCount != 0 && !removeItemCountById(ITEM_FORGE_CORE, coreCount)) {
-				g_logger().error("[{}][Log 1] Failed to remove item 'id :{} count: {}' from player {}", __FUNCTION__, fmt::underlying(ITEM_FORGE_CORE), coreCount, getName());
-				sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-				return;
-			}
-			history.coresCost = coreCount;
-		}
-		if (bonus != 3) {
-			uint64_t cost = 0;
-			for (const auto* itemClassification : g_game().getItemsClassifications()) {
-				if (itemClassification->id != firstForgingItem->getClassification()) {
-					continue;
-				}
-
-				for (const auto &[mapTier, mapPrice] : itemClassification->tiers) {
-					if (mapTier == firstForgingItem->getTier()) {
-						cost = mapPrice.priceToUpgrade;
-						break;
-					}
-				}
-				break;
-			}
-			if (!g_game().removeMoney(static_self_cast<Player>(), cost, 0, true)) {
-				g_logger().error("[{}] Failed to remove {} gold from player with name {}", __FUNCTION__, cost, getName());
-				sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-				return;
-			}
-			history.cost = cost;
-		}
-
-		if (bonus == 4) {
-			if (tier > 0) {
-				secondForgedItem->setTier(tier - 1);
-			}
-		} else if (bonus == 6) {
-			secondForgedItem->setTier(tier + 1);
-		} else if (bonus == 7 && tier + 2 <= firstForgedItem->getClassification()) {
-			firstForgedItem->setTier(tier + 2);
-		}
-
-		if (bonus != 4 && bonus != 5 && bonus != 6 && bonus != 8) {
-			returnValue = g_game().internalRemoveItem(secondForgedItem, 1);
-			if (returnValue != RETURNVALUE_NOERROR) {
-				g_logger().error("[Log 6] Failed to remove forge item {} from player with name {}", itemId, getName());
-				sendCancelMessage(getReturnMessage(returnValue));
-				sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-				return;
-			}
-		}
-	} else {
-		auto isTierLost = uniform_random(1, 100) <= (reduceTierLoss ? g_configManager().getNumber(FORGE_TIER_LOSS_REDUCTION, __FUNCTION__) : 100);
-		if (isTierLost) {
-			if (secondForgedItem->getTier() >= 1) {
-				secondForgedItem->setTier(tier - 1);
-			} else {
-				returnValue = g_game().internalRemoveItem(secondForgedItem, 1);
-				if (returnValue != RETURNVALUE_NOERROR) {
-					g_logger().error("[Log 7] Failed to remove forge item {} from player with name {}", itemId, getName());
-					sendCancelMessage(getReturnMessage(returnValue));
-					sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-					return;
-				}
-			}
-		}
-		bonus = (isTierLost ? 0 : 8);
-		history.coresCost = coreCount;
-
-		if (getForgeDusts() < dustCost) {
-			g_logger().error("[Log 7] Failed to remove fuse dusts from player with name {}", getName());
-			sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-			return;
-		} else {
-			setForgeDusts(getForgeDusts() - dustCost);
-		}
-
-		if (coreCount != 0 && !removeItemCountById(ITEM_FORGE_CORE, coreCount)) {
-			g_logger().error("[{}][Log 2] Failed to remove item 'id: {}, count: {}' from player {}", __FUNCTION__, fmt::underlying(ITEM_FORGE_CORE), coreCount, getName());
-			sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-			return;
-		}
+		history.dustCost = dustCost;
+		setForgeDusts(getForgeDusts() - dustCost);
 
 		uint64_t cost = 0;
 		for (const auto* itemClassification : g_game().getItemsClassifications()) {
@@ -7023,7 +7077,7 @@ void Player::forgeFuseItems(uint16_t itemId, uint8_t tier, bool success, bool re
 
 			for (const auto &[mapTier, mapPrice] : itemClassification->tiers) {
 				if (mapTier == firstForgingItem->getTier()) {
-					cost = mapPrice.priceToUpgrade;
+					cost = mapPrice.convergenceFusionPrice;
 					break;
 				}
 			}
@@ -7034,9 +7088,139 @@ void Player::forgeFuseItems(uint16_t itemId, uint8_t tier, bool success, bool re
 			sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 			return;
 		}
-
+		g_metrics().addCounter("balance_decrease", cost, { { "player", getName() }, { "context", "forge_convergence_fuse" } });
 		history.cost = cost;
+	} else {
+		firstForgedItem->setTier(tier);
+		std::shared_ptr<Item> secondForgedItem = Item::CreateItem(secondItemId, 1);
+		if (!secondForgedItem) {
+			g_logger().error("[Log 4] Player with name {} failed to fuse item with id {}", getName(), secondItemId);
+			sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+			return;
+		}
+
+		secondForgedItem->setTier(tier);
+		returnValue = g_game().internalAddItem(exaltationContainer, secondForgedItem, INDEX_WHEREEVER);
+		if (returnValue != RETURNVALUE_NOERROR) {
+			g_logger().error("[Log 2] Failed to add forge item {} from player with name {}", secondItemId, getName());
+			sendCancelMessage(getReturnMessage(returnValue));
+			sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+			return;
+		}
+
+		if (success) {
+			firstForgedItem->setTier(tier + 1);
+
+			if (bonus != 1) {
+				history.dustCost = dustCost;
+				setForgeDusts(getForgeDusts() - dustCost);
+			}
+			if (bonus != 2) {
+				if (coreCount != 0 && !removeItemCountById(ITEM_FORGE_CORE, coreCount)) {
+					g_logger().error("[{}][Log 1] Failed to remove item 'id :{} count: {}' from player {}", __FUNCTION__, fmt::underlying(ITEM_FORGE_CORE), coreCount, getName());
+					sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+					return;
+				}
+				history.coresCost = coreCount;
+			}
+			if (bonus != 3) {
+				uint64_t cost = 0;
+				for (const auto* itemClassification : g_game().getItemsClassifications()) {
+					if (itemClassification->id != firstForgedItem->getClassification()) {
+						continue;
+					}
+					if (!itemClassification->tiers.contains(firstForgedItem->getTier())) {
+						g_logger().error("[{}] Failed to find tier {} for item {} in classification {}", __FUNCTION__, firstForgedItem->getTier(), firstForgedItem->getClassification(), itemClassification->id);
+						sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+						break;
+					}
+					cost = itemClassification->tiers.at(firstForgedItem->getTier()).regularPrice;
+					break;
+				}
+				if (!g_game().removeMoney(static_self_cast<Player>(), cost, 0, true)) {
+					g_logger().error("[{}] Failed to remove {} gold from player with name {}", __FUNCTION__, cost, getName());
+					sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+					return;
+				}
+				g_metrics().addCounter("balance_decrease", cost, { { "player", getName() }, { "context", "forge_fuse" } });
+				history.cost = cost;
+			}
+
+			if (bonus == 4) {
+				if (tier > 0) {
+					secondForgedItem->setTier(tier - 1);
+				}
+			} else if (bonus == 6) {
+				secondForgedItem->setTier(tier + 1);
+			} else if (bonus == 7 && tier + 2 <= firstForgedItem->getClassification()) {
+				firstForgedItem->setTier(tier + 2);
+			}
+
+			if (bonus != 4 && bonus != 5 && bonus != 6 && bonus != 8) {
+				returnValue = g_game().internalRemoveItem(secondForgedItem, 1);
+				if (returnValue != RETURNVALUE_NOERROR) {
+					g_logger().error("[Log 6] Failed to remove forge item {} from player with name {}", secondItemId, getName());
+					sendCancelMessage(getReturnMessage(returnValue));
+					sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+					return;
+				}
+			}
+		} else {
+			auto isTierLost = uniform_random(1, 100) <= (reduceTierLoss ? g_configManager().getNumber(FORGE_TIER_LOSS_REDUCTION, __FUNCTION__) : 100);
+			if (isTierLost) {
+				if (secondForgedItem->getTier() >= 1) {
+					secondForgedItem->setTier(tier - 1);
+				} else {
+					returnValue = g_game().internalRemoveItem(secondForgedItem, 1);
+					if (returnValue != RETURNVALUE_NOERROR) {
+						g_logger().error("[Log 7] Failed to remove forge item {} from player with name {}", secondItemId, getName());
+						sendCancelMessage(getReturnMessage(returnValue));
+						sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+						return;
+					}
+				}
+			}
+			bonus = (isTierLost ? 0 : 8);
+			history.coresCost = coreCount;
+
+			if (getForgeDusts() < dustCost) {
+				g_logger().error("[Log 7] Failed to remove fuse dusts from player with name {}", getName());
+				sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+				return;
+			} else {
+				setForgeDusts(getForgeDusts() - dustCost);
+			}
+
+			if (coreCount != 0 && !removeItemCountById(ITEM_FORGE_CORE, coreCount)) {
+				g_logger().error("[{}][Log 2] Failed to remove item 'id: {}, count: {}' from player {}", __FUNCTION__, fmt::underlying(ITEM_FORGE_CORE), coreCount, getName());
+				sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+				return;
+			}
+
+			uint64_t cost = 0;
+			for (const auto* itemClassification : g_game().getItemsClassifications()) {
+				if (itemClassification->id != firstForgingItem->getClassification()) {
+					continue;
+				}
+				if (!itemClassification->tiers.contains(firstForgingItem->getTier() + 1)) {
+					g_logger().error("[{}] Failed to find tier {} for item {} in classification {}", __FUNCTION__, firstForgingItem->getTier() + 1, firstForgingItem->getClassification(), itemClassification->id);
+					sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+					break;
+				}
+				cost = itemClassification->tiers.at(firstForgingItem->getTier() + 1).regularPrice;
+				break;
+			}
+			if (!g_game().removeMoney(static_self_cast<Player>(), cost, 0, true)) {
+				g_logger().error("[{}] Failed to remove {} gold from player with name {}", __FUNCTION__, cost, getName());
+				sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+				return;
+			}
+			g_metrics().addCounter("balance_decrease", cost, { { "player", getName() }, { "context", "forge_fuse" } });
+
+			history.cost = cost;
+		}
 	}
+
 	returnValue = g_game().internalAddItem(static_self_cast<Player>(), exaltationContainer, INDEX_WHEREEVER);
 	if (returnValue != RETURNVALUE_NOERROR) {
 		g_logger().error("Failed to add exaltation chest to player with name {}", fmt::underlying(ITEM_EXALTATION_CHEST), getName());
@@ -7046,16 +7230,18 @@ void Player::forgeFuseItems(uint16_t itemId, uint8_t tier, bool success, bool re
 	}
 
 	history.firstItemName = firstForgingItem->getName();
+	history.secondItemName = secondForgingItem->getName();
 	history.bonus = bonus;
 	history.createdAt = getTimeNow();
+	history.convergence = convergence;
 	registerForgeHistoryDescription(history);
 
-	sendForgeFusionItem(itemId, tier, success, bonus, coreCount);
+	sendForgeResult(actionType, firstItemId, tier, secondItemId, tier + 1, success, bonus, coreCount, convergence);
 }
 
-void Player::forgeTransferItemTier(uint16_t donorItemId, uint8_t tier, uint16_t receiveItemId) {
+void Player::forgeTransferItemTier(ForgeAction_t actionType, uint16_t donorItemId, uint8_t tier, uint16_t receiveItemId, bool convergence) {
 	ForgeHistory history;
-	history.actionType = ForgeConversion_t::FORGE_ACTION_TRANSFER;
+	history.actionType = actionType;
 	history.tier = tier;
 	history.success = true;
 
@@ -7100,27 +7286,27 @@ void Player::forgeTransferItemTier(uint16_t donorItemId, uint8_t tier, uint16_t 
 		return;
 	}
 
-	std::shared_ptr<Item> newDonorItem = Item::CreateItem(donorItemId, 1);
-	if (!newDonorItem) {
-		g_logger().error("[Log 4] Player with name {} failed to transfer item with id {}", getName(), donorItemId);
-		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-		return;
-	}
-	returnValue = g_game().internalAddItem(exaltationContainer, newDonorItem, INDEX_WHEREEVER);
-	if (returnValue != RETURNVALUE_NOERROR) {
-		g_logger().error("[Log 5] Failed to add forge item {} from player with name {}", donorItemId, getName());
-		sendCancelMessage(getReturnMessage(returnValue));
-		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-		return;
-	}
-
 	std::shared_ptr<Item> newReceiveItem = Item::CreateItem(receiveItemId, 1);
 	if (!newReceiveItem) {
 		g_logger().error("[Log 6] Player with name {} failed to fuse item with id {}", getName(), receiveItemId);
 		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
 		return;
 	}
-	newReceiveItem->setTier(tier - 1);
+
+	auto configKey = convergence ? FORGE_CONVERGENCE_TRANSFER_DUST_COST : FORGE_TRANSFER_DUST_COST;
+	if (getForgeDusts() < g_configManager().getNumber(configKey, __FUNCTION__)) {
+		g_logger().error("[Log 8] Failed to remove transfer dusts from player with name {}", getName());
+		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+		return;
+	} else {
+		setForgeDusts(getForgeDusts() - g_configManager().getNumber(configKey, __FUNCTION__));
+	}
+
+	if (convergence) {
+		newReceiveItem->setTier(tier);
+	} else {
+		newReceiveItem->setTier(tier - 1);
+	}
 	returnValue = g_game().internalAddItem(exaltationContainer, newReceiveItem, INDEX_WHEREEVER);
 	if (returnValue != RETURNVALUE_NOERROR) {
 		g_logger().error("[Log 7] Failed to add forge item {} from player with name {}", receiveItemId, getName());
@@ -7129,28 +7315,21 @@ void Player::forgeTransferItemTier(uint16_t donorItemId, uint8_t tier, uint16_t 
 		return;
 	}
 
-	if (getForgeDusts() < g_configManager().getNumber(FORGE_TRANSFER_DUST_COST, __FUNCTION__)) {
-		g_logger().error("[Log 8] Failed to remove transfer dusts from player with name {}", getName());
-		sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
-		return;
-	} else {
-		setForgeDusts(getForgeDusts() - g_configManager().getNumber(FORGE_TRANSFER_DUST_COST, __FUNCTION__));
-	}
-
 	uint8_t coresAmount = 0;
 	uint64_t cost = 0;
 	for (const auto &itemClassification : g_game().getItemsClassifications()) {
 		if (itemClassification->id != donorItem->getClassification()) {
 			continue;
 		}
-
-		for (const auto &[mapTier, mapPrice] : itemClassification->tiers) {
-			if (mapTier == donorItem->getTier() - 1) {
-				cost = mapPrice.priceToUpgrade;
-				coresAmount = mapPrice.corePriceToFuse;
-				break;
-			}
+		if (!itemClassification->tiers.contains(donorItem->getTier())) {
+			g_logger().error("[{}] Failed to find tier {} for item {} in classification {}", __FUNCTION__, donorItem->getTier(), donorItem->getClassification(), itemClassification->id);
+			sendForgeError(RETURNVALUE_CONTACTADMINISTRATOR);
+			break;
 		}
+		auto tierPriecs = itemClassification->tiers.at(donorItem->getTier());
+		cost = convergence ? tierPriecs.convergenceTransferPrice : tierPriecs.regularPrice;
+		coresAmount = tierPriecs.corePrice;
+		break;
 	}
 
 	if (!removeItemCountById(ITEM_FORGE_CORE, coresAmount)) {
@@ -7165,6 +7344,7 @@ void Player::forgeTransferItemTier(uint16_t donorItemId, uint8_t tier, uint16_t 
 		return;
 	}
 	history.cost = cost;
+	g_metrics().addCounter("balance_decrease", cost, { { "player", getName() }, { "context", "forge_transfer" } });
 
 	returnValue = g_game().internalAddItem(static_self_cast<Player>(), exaltationContainer, INDEX_WHEREEVER);
 	if (returnValue != RETURNVALUE_NOERROR) {
@@ -7174,22 +7354,22 @@ void Player::forgeTransferItemTier(uint16_t donorItemId, uint8_t tier, uint16_t 
 		return;
 	}
 
-	history.firstItemName = newDonorItem->getName();
+	history.firstItemName = Item::items[donorItemId].name;
 	history.secondItemName = newReceiveItem->getName();
 	history.createdAt = getTimeNow();
+	history.convergence = convergence;
 	registerForgeHistoryDescription(history);
 
-	sendTransferItemTier(donorItemId, tier, receiveItemId);
+	sendForgeResult(actionType, donorItemId, tier, receiveItemId, convergence ? tier : tier - 1, true, 0, 0, convergence);
 }
 
-void Player::forgeResourceConversion(uint8_t action) {
-	auto actionEnum = magic_enum::enum_value<ForgeConversion_t>(action);
+void Player::forgeResourceConversion(ForgeAction_t actionType) {
 	ForgeHistory history;
-	history.actionType = actionEnum;
+	history.actionType = actionType;
 	history.success = true;
 
 	ReturnValue returnValue = RETURNVALUE_NOERROR;
-	if (actionEnum == ForgeConversion_t::FORGE_ACTION_DUSTTOSLIVERS) {
+	if (actionType == ForgeAction_t::DUSTTOSLIVERS) {
 		auto dusts = getForgeDusts();
 		auto cost = static_cast<uint16_t>(g_configManager().getNumber(FORGE_COST_ONE_SLIVER, __FUNCTION__) * g_configManager().getNumber(FORGE_SLIVER_AMOUNT, __FUNCTION__));
 		if (cost > dusts) {
@@ -7210,7 +7390,7 @@ void Player::forgeResourceConversion(uint8_t action) {
 		history.cost = cost;
 		history.gained = 3;
 		setForgeDusts(dusts - cost);
-	} else if (actionEnum == ForgeConversion_t::FORGE_ACTION_SLIVERSTOCORES) {
+	} else if (actionType == ForgeAction_t::SLIVERSTOCORES) {
 		auto [sliverCount, coreCount] = getForgeSliversAndCores();
 		auto cost = static_cast<uint16_t>(g_configManager().getNumber(FORGE_CORE_COST, __FUNCTION__));
 		if (cost > sliverCount) {
@@ -7276,10 +7456,10 @@ void Player::registerForgeHistoryDescription(ForgeHistory history) {
 	std::stringstream detailsResponse;
 	auto itemId = Item::items.getItemIdByName(history.firstItemName);
 	const ItemType &itemType = Item::items[itemId];
-	if (history.actionType == ForgeConversion_t::FORGE_ACTION_FUSION) {
+	if (history.actionType == ForgeAction_t::FUSION) {
 		if (history.success) {
 			detailsResponse << fmt::format(
-				"{:s} <br><br>"
+				"{:s}{:s} <br><br>"
 				"Fusion partners:"
 				"<ul> "
 				"<li>"
@@ -7313,6 +7493,7 @@ void Player::registerForgeHistoryDescription(ForgeHistory history) {
 				"</li>"
 				"</ul>",
 				successfulString,
+				history.convergence ? " (convergence)" : "",
 				itemType.article, itemType.name, std::to_string(history.tier),
 				itemType.article, itemType.name, std::to_string(history.tier),
 				history.bonus == 8 ? "unchanged" : "consumed",
@@ -7320,7 +7501,7 @@ void Player::registerForgeHistoryDescription(ForgeHistory history) {
 			);
 		} else {
 			detailsResponse << fmt::format(
-				"{:s} <br><br>"
+				"{:s}{:s} <br><br>"
 				"Fusion partners:"
 				"<ul> "
 				"<li>"
@@ -7354,15 +7535,16 @@ void Player::registerForgeHistoryDescription(ForgeHistory history) {
 				"</li>"
 				"</ul>",
 				successfulString,
+				history.convergence ? " (convergence)" : "",
 				itemType.article, itemType.name, std::to_string(history.tier),
 				itemType.article, itemType.name, std::to_string(history.tier),
 				history.bonus == 8 ? "unchanged" : historyTierString,
 				history.coresCost, price
 			);
 		}
-	} else if (history.actionType == ForgeConversion_t::FORGE_ACTION_TRANSFER) {
+	} else if (history.actionType == ForgeAction_t::TRANSFER) {
 		detailsResponse << fmt::format(
-			"{:s} <br><br>"
+			"{:s}{:s} <br><br>"
 			"Transfer partners:"
 			"<ul> "
 			"<li>"
@@ -7396,19 +7578,20 @@ void Player::registerForgeHistoryDescription(ForgeHistory history) {
 			"</li>"
 			"</ul>",
 			successfulString,
+			history.convergence ? " (convergence)" : "",
 			itemType.article, itemType.name, std::to_string(history.tier),
 			itemType.article, itemType.name, std::to_string(history.tier),
 			itemType.article, itemType.name, std::to_string(history.tier),
 			itemType.article, itemType.name, std::to_string(history.tier),
 			price
 		);
-	} else if (history.actionType == ForgeConversion_t::FORGE_ACTION_DUSTTOSLIVERS) {
+	} else if (history.actionType == ForgeAction_t::DUSTTOSLIVERS) {
 		detailsResponse << fmt::format("Converted {:d} dust to {:d} slivers.", history.cost, history.gained);
-	} else if (history.actionType == ForgeConversion_t::FORGE_ACTION_SLIVERSTOCORES) {
-		history.actionType = ForgeConversion_t::FORGE_ACTION_DUSTTOSLIVERS;
+	} else if (history.actionType == ForgeAction_t::SLIVERSTOCORES) {
+		history.actionType = ForgeAction_t::DUSTTOSLIVERS;
 		detailsResponse << fmt::format("Converted {:d} slivers to {:d} exalted core.", history.cost, history.gained);
-	} else if (history.actionType == ForgeConversion_t::FORGE_ACTION_INCREASELIMIT) {
-		history.actionType = ForgeConversion_t::FORGE_ACTION_DUSTTOSLIVERS;
+	} else if (history.actionType == ForgeAction_t::INCREASELIMIT) {
+		history.actionType = ForgeAction_t::DUSTTOSLIVERS;
 		detailsResponse << fmt::format("Spent {:d} dust to increase the dust limit to {:d}.", history.cost, history.gained + 1);
 	} else {
 		detailsResponse << "(unknown)";
@@ -7576,15 +7759,15 @@ void Player::parseAttackRecvHazardSystem(CombatDamage &damage, std::shared_ptr<M
 	}
 
 	auto points = getHazardSystemPoints();
-	if (party) {
-		for (const auto partyMember : party->getMembers()) {
+	if (m_party) {
+		for (const auto partyMember : m_party->getMembers()) {
 			if (partyMember && partyMember->getHazardSystemPoints() < points) {
 				points = partyMember->getHazardSystemPoints();
 			}
 		}
 
-		if (party->getLeader() && party->getLeader()->getHazardSystemPoints() < points) {
-			points = party->getLeader()->getHazardSystemPoints();
+		if (m_party->getLeader() && m_party->getLeader()->getHazardSystemPoints() < points) {
+			points = m_party->getLeader()->getHazardSystemPoints();
 		}
 	}
 
@@ -7635,15 +7818,15 @@ void Player::parseAttackDealtHazardSystem(CombatDamage &damage, std::shared_ptr<
 	}
 
 	auto points = getHazardSystemPoints();
-	if (party) {
-		for (const auto partyMember : party->getMembers()) {
+	if (m_party) {
+		for (const auto partyMember : m_party->getMembers()) {
 			if (partyMember && partyMember->getHazardSystemPoints() < points) {
 				points = partyMember->getHazardSystemPoints();
 			}
 		}
 
-		if (party->getLeader() && party->getLeader()->getHazardSystemPoints() < points) {
-			points = party->getLeader()->getHazardSystemPoints();
+		if (m_party->getLeader() && m_party->getLeader()->getHazardSystemPoints() < points) {
+			points = m_party->getLeader()->getHazardSystemPoints();
 		}
 	}
 
@@ -7659,6 +7842,17 @@ void Player::parseAttackDealtHazardSystem(CombatDamage &damage, std::shared_ptr<
 		if (chance <= stage) {
 			damage.primary.value = 0;
 			damage.secondary.value = 0;
+			return;
+		}
+	}
+	if (monster->getHazardSystemDefenseBoost()) {
+		stage = points * static_cast<uint16_t>(g_configManager().getNumber(HAZARD_DEFENSE_MULTIPLIER, __FUNCTION__));
+		if (stage != 0) {
+			damage.exString = fmt::format("(hazard -{}%)", stage / 100.);
+			damage.primary.value -= static_cast<int32_t>(std::ceil((static_cast<double>(damage.primary.value) * stage) / 10000));
+			if (damage.secondary.value != 0) {
+				damage.secondary.value -= static_cast<int32_t>(std::ceil((static_cast<double>(damage.secondary.value) * stage) / 10000));
+			}
 			return;
 		}
 	}
@@ -7678,6 +7872,7 @@ const std::unique_ptr<PlayerWheel> &Player::wheel() const {
 }
 
 void Player::sendLootMessage(const std::string &message) const {
+	auto party = getParty();
 	if (!party) {
 		sendTextMessage(MESSAGE_LOOT, message);
 		return;
@@ -7716,6 +7911,16 @@ std::shared_ptr<Container> Player::getLootPouch() {
 	return container;
 }
 
+std::shared_ptr<Container> Player::getStoreInbox() const {
+	auto thing = getThing(CONST_SLOT_STORE_INBOX);
+	if (!thing) {
+		return nullptr;
+	}
+
+	auto storeInbox = thing->getContainer();
+	return storeInbox ? storeInbox : nullptr;
+}
+
 bool Player::hasPermittedConditionInPZ() const {
 	static const std::unordered_set<ConditionType_t> allowedConditions = {
 		CONDITION_ENERGY,
@@ -7735,4 +7940,43 @@ bool Player::hasPermittedConditionInPZ() const {
 	}
 
 	return hasPermittedCondition;
+}
+
+uint16_t Player::getDodgeChance() const {
+	uint16_t chance = 0;
+	if (auto playerArmor = getInventoryItem(CONST_SLOT_ARMOR);
+		playerArmor != nullptr && playerArmor->getTier()) {
+		chance += static_cast<uint16_t>(playerArmor->getDodgeChance() * 100);
+	}
+
+	chance += m_wheelPlayer->getStat(WheelStat_t::DODGE);
+
+	return chance;
+}
+
+void Player::checkAndShowBlessingMessage() {
+	auto adventurerBlessingLevel = g_configManager().getNumber(ADVENTURERSBLESSING_LEVEL, __FUNCTION__);
+	auto willNotLoseBless = getLevel() < adventurerBlessingLevel && getVocationId() > VOCATION_NONE;
+	std::string bless = getBlessingsName();
+	std::ostringstream blessOutput;
+
+	if (willNotLoseBless) {
+		auto addedBless = false;
+		for (uint8_t i = 2; i <= 6; i++) {
+			if (!hasBlessing(i)) {
+				addBlessing(i, 1);
+				addedBless = true;
+			}
+		}
+		sendBlessStatus();
+		if (addedBless) {
+			blessOutput << fmt::format("You have received adventurer's blessings for being level lower than {}!\nYou are still blessed with {}", adventurerBlessingLevel, bless);
+		}
+	} else {
+		bless.empty() ? blessOutput << "You lost all your blessings." : blessOutput << "You are still blessed with " << bless;
+	}
+
+	if (!blessOutput.str().empty()) {
+		sendTextMessage(MESSAGE_EVENT_ADVANCE, blessOutput.str());
+	}
 }

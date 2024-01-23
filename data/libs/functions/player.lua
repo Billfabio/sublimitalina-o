@@ -1,10 +1,6 @@
 -- Functions from The Forgotten Server
 local foodCondition = Condition(CONDITION_REGENERATION, CONDITIONID_DEFAULT)
 
-local function firstToUpper(str)
-	return (str:gsub("^%l", string.upper))
-end
-
 function Player.feed(self, food)
 	local condition = self:getCondition(CONDITION_REGENERATION, CONDITIONID_DEFAULT)
 	if condition then
@@ -27,7 +23,7 @@ function Player.feed(self, food)
 end
 
 function Player.getClosestFreePosition(self, position, extended)
-	if self:getGroup():getAccess() and self:getAccountType() >= ACCOUNT_TYPE_GOD then
+	if self:getGroup():getAccess() and self:getAccountType() == ACCOUNT_TYPE_GOD then
 		return position
 	end
 	return Creature.getClosestFreePosition(self, position, extended)
@@ -64,7 +60,7 @@ function Player.sendExtendedOpcode(self, opcode, buffer)
 	local networkMessage = NetworkMessage()
 	networkMessage:addByte(0x32)
 	networkMessage:addByte(opcode)
-	networkMessage:addString(buffer)
+	networkMessage:addString(buffer, "Player.sendExtendedOpcode - buffer")
 	networkMessage:sendToPlayer(self)
 	networkMessage:delete()
 	return true
@@ -121,11 +117,12 @@ function Player.getCookiesDelivered(self)
 end
 
 function Player.allowMovement(self, allow)
-	return self:setStorageValue(Global.Storage.BlockMovementStorage, allow and -1 or 1)
+	return allow and self:kv():remove("block-movement") or self:kv():set("block-movement", 1)
 end
 
 function Player.hasAllowMovement(self)
-	return self:getStorageValue(Global.Storage.BlockMovementStorage) ~= 1
+	local blockMovement = self:kv():get("block-movement") or 0
+	return blockMovement ~= 1
 end
 
 function Player.checkGnomeRank(self)
@@ -321,7 +318,7 @@ function Player.getMarriageDescription(thing)
 		if self == thing then
 			descr = descr .. " You are "
 		else
-			descr = descr .. " " .. firstToUpper(thing:getSubjectPronoun()) .. " " .. thing:getSubjectVerb() .. " "
+			descr = descr .. " " .. thing:getSubjectPronoun():titleCase() .. " " .. thing:getSubjectVerb() .. " "
 		end
 		descr = descr .. "married to " .. getPlayerNameById(playerSpouse) .. "."
 	end
@@ -431,7 +428,7 @@ function Player:createFamiliar(familiarName, timeLeft)
 	playerPosition:sendMagicEffect(CONST_ME_MAGIC_BLUE)
 	myFamiliar:getPosition():sendMagicEffect(CONST_ME_TELEPORT)
 	-- Divide by 2 to get half the time (the default total time is 30 / 2 = 15)
-	self:setStorageValue(Global.Storage.FamiliarSummon, os.time() + timeLeft)
+	self:kv():set("familiar-summon-time", os.time() + timeLeft)
 	addEvent(RemoveFamiliar, timeLeft * 1000, myFamiliar:getId(), self:getId())
 	for sendMessage = 1, #FAMILIAR_TIMER do
 		self:setStorageValue(
@@ -520,7 +517,7 @@ function Player.getSubjectVerb(self, past)
 end
 
 function Player.findItemInInbox(self, itemId)
-	local inbox = self:getSlotItem(CONST_SLOT_STORE_INBOX)
+	local inbox = self:getStoreInbox()
 	local items = inbox:getItems()
 	for _, item in pairs(items) do
 		if item:getId() == itemId then
@@ -537,43 +534,49 @@ function Player.updateHazard(self)
 		return true
 	end
 
+	self:setHazardSystemPoints(0)
 	for _, zone in pairs(zones) do
 		local hazard = Hazard.getByName(zone:getName())
-		if not hazard then
-			self:setHazardSystemPoints(0)
+		if hazard then
+			if self:getParty() then
+				self:getParty():refreshHazard()
+			else
+				self:setHazardSystemPoints(hazard:getPlayerCurrentLevel(self))
+			end
 			return true
 		end
-
-		if self:getParty() then
-			self:getParty():refreshHazard()
-		else
-			self:setHazardSystemPoints(hazard:getPlayerCurrentLevel(self))
-		end
-		return true
 	end
 	return true
 end
 
-function Player:addItemStoreInbox(itemId, amount, moveable)
-	local inbox = self:getSlotItem(CONST_SLOT_STORE_INBOX)
-	if not moveable then
-		for _, item in pairs(inbox:getItems()) do
-			if item:getId() == itemId then
-				item:removeAttribute(ITEM_ATTRIBUTE_STORE)
-			end
+function Player:addItemStoreInboxEx(item, movable, setOwner)
+	local inbox = self:getStoreInbox()
+	if not movable then
+		item:setOwner(self)
+		item:setAttribute(ITEM_ATTRIBUTE_STORE, systemTime())
+	elseif setOwner then
+		item:setOwner(self)
+	end
+	inbox:addItemEx(item, INDEX_WHEREEVER, FLAG_NOLIMIT)
+	return item
+end
+
+function Player:addItemStoreInbox(itemId, amount, movable, setOwner)
+	local iType = ItemType(itemId)
+	if not iType then
+		return nil
+	end
+	if iType:isStackable() then
+		while amount > iType:getStackSize() do
+			self:addItemStoreInboxEx(Game.createItem(itemId, iType:getStackSize()), movable, setOwner)
+			amount = amount - iType:getStackSize()
 		end
 	end
-
-	local newItem = inbox:addItem(itemId, amount, INDEX_WHEREEVER, FLAG_NOLIMIT)
-
-	if not moveable then
-		for _, item in pairs(inbox:getItems()) do
-			if item:getId() == itemId then
-				item:setAttribute(ITEM_ATTRIBUTE_STORE, systemTime())
-			end
-		end
+	local item = Game.createItem(itemId, amount)
+	if not item then
+		return nil
 	end
-	return newItem
+	return self:addItemStoreInboxEx(item, movable, setOwner)
 end
 
 ---@param monster Monster
@@ -622,16 +625,17 @@ function Player:calculateLootFactor(monster)
 	}
 end
 
-function Player:setExhaustion(key, seconds)
-	return self:setStorageValue(key, os.time() + seconds)
+function Player:setExhaustion(scope, seconds)
+	return self:kv():scoped("exhaustion"):set(scope, os.time() + seconds)
 end
 
-function Player:getExhaustion(key)
-	return math.max(self:getStorageValue(key) - os.time(), 0)
+function Player:getExhaustion(scope)
+	local exhaustionKV = self:kv():scoped("exhaustion"):get(scope) or 0
+	return math.max(exhaustionKV - os.time(), 0)
 end
 
-function Player:hasExhaustion(key)
-	return self:getExhaustion(key) > 0 and true or false
+function Player:hasExhaustion(scope)
+	return self:getExhaustion(scope) > 0 and true or false
 end
 
 function Player:setFiendish()
@@ -650,6 +654,62 @@ function Player:setFiendish()
 		monster:setFiendish(position, self)
 	end
 	return false
+end
+
+function Player:findItemInInbox(itemId, name)
+	local inbox = self:getStoreInbox()
+	local items = inbox:getItems()
+	for _, item in pairs(items) do
+		if item:getId() == itemId and (not name or item:getName() == name) then
+			return item
+		end
+	end
+	return nil
+end
+
+function Player:sendColoredMessage(message)
+	local grey = 3003
+	local blue = 3043
+	local green = 3415
+	local purple = 36792
+	local yellow = 34021
+
+	local msg = message:gsub("{grey|", "{" .. grey .. "|"):gsub("{blue|", "{" .. blue .. "|"):gsub("{green|", "{" .. green .. "|"):gsub("{purple|", "{" .. purple .. "|"):gsub("{yellow|", "{" .. yellow .. "|")
+	return self:sendTextMessage(MESSAGE_LOOT, msg)
+end
+
+function Player:showInfoModal(title, message, buttonText)
+	local modal = ModalWindow({
+		title = title,
+		message = message,
+	})
+	buttonText = buttonText or "Close"
+	modal:addButton(buttonText, function() end)
+	modal:setDefaultEscapeButton(buttonText)
+
+	modal:sendToPlayer(self)
+end
+
+function Player:showConfirmationModal(title, message, yesCallback, noCallback, yesText, noText)
+	local modal = ModalWindow({
+		title = title,
+		message = message,
+	})
+	yesText = yesText or "Yes"
+	modal:addButton(yesText, yesCallback or function() end)
+	noText = noText or "No"
+	modal:addButton(noText, noCallback or function() end)
+	modal:setDefaultEscapeButton(noText)
+
+	modal:sendToPlayer(self)
+end
+
+function Player:removeAll(itemId)
+	local count = 0
+	while self:removeItem(itemId, 1) do
+		count = count + 1
+	end
+	return count
 end
 
 local function bossKVScope(bossNameOrId)

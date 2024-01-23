@@ -15,6 +15,7 @@
 #include "game/game.hpp"
 #include "items/bed.hpp"
 #include "game/scheduling/save_manager.hpp"
+#include "lib/metrics/metrics.hpp"
 
 House::House(uint32_t houseId) :
 	id(houseId) { }
@@ -42,6 +43,28 @@ void House::setNewOwnerGuid(int32_t newOwnerGuid, bool serverStartup) {
 	}
 }
 
+void House::clearHouseInfo(bool preventOwnerDeletion) {
+	// Remove players from beds
+	for (auto bed : bedsList) {
+		if (bed->getSleeper() != 0) {
+			bed->wakeUp(nullptr);
+		}
+	}
+
+	// Clean access lists
+	if (!preventOwnerDeletion) {
+		owner = 0;
+		ownerAccountId = 0;
+	}
+	// Clean access lists
+	setAccessList(SUBOWNER_LIST, "");
+	setAccessList(GUEST_LIST, "");
+
+	for (auto door : doorList) {
+		door->setAccessList("");
+	}
+}
+
 bool House::tryTransferOwnership(std::shared_ptr<Player> player, bool serverStartup) {
 	bool transferSuccess = false;
 	if (player) {
@@ -59,24 +82,7 @@ bool House::tryTransferOwnership(std::shared_ptr<Player> player, bool serverStar
 		}
 	}
 
-	// Remove players from beds
-	for (auto bed : bedsList) {
-		if (bed->getSleeper() != 0) {
-			bed->wakeUp(nullptr);
-		}
-	}
-
-	// Clean access lists
-	if (!serverStartup) {
-		owner = 0;
-		ownerAccountId = 0;
-	}
-	setAccessList(SUBOWNER_LIST, "");
-	setAccessList(GUEST_LIST, "");
-
-	for (auto door : doorList) {
-		door->setAccessList("");
-	}
+	clearHouseInfo(serverStartup);
 
 	return transferSuccess;
 }
@@ -266,27 +272,54 @@ bool House::transferToDepot(std::shared_ptr<Player> player) const {
 	if (townId == 0 || !player) {
 		return false;
 	}
+	for (std::shared_ptr<HouseTile> tile : houseTiles) {
+		if (!transferToDepot(player, tile)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool House::transferToDepot(std::shared_ptr<Player> player, std::shared_ptr<HouseTile> tile) const {
+	if (townId == 0 || !player) {
+		return false;
+	}
+	if (tile->getHouse().get() != this) {
+		g_logger().debug("[{}] tile house is not this house", __FUNCTION__);
+		return false;
+	}
 
 	ItemList moveItemList;
-	for (std::shared_ptr<HouseTile> tile : houseTiles) {
-		if (const TileItemVector* items = tile->getItemList()) {
-			for (const std::shared_ptr<Item> &item : *items) {
-				if (item->isWrapable()) {
-					handleWrapableItem(moveItemList, item, player, tile);
-				} else if (item->isPickupable()) {
-					moveItemList.push_back(item);
-				} else {
-					handleContainer(moveItemList, item);
-				}
+	if (const TileItemVector* items = tile->getItemList()) {
+		for (const std::shared_ptr<Item> &item : *items) {
+			if (item->isWrapable()) {
+				handleWrapableItem(moveItemList, item, player, tile);
+			} else if (item->isPickupable()) {
+				moveItemList.push_back(item);
+			} else {
+				handleContainer(moveItemList, item);
 			}
 		}
 	}
 
+	std::unordered_set<std::shared_ptr<Player>> playersToSave = { player };
+
 	for (std::shared_ptr<Item> item : moveItemList) {
 		g_logger().debug("[{}] moving item '{}' to depot", __FUNCTION__, item->getName());
-		g_game().internalMoveItem(item->getParent(), player->getInbox(), INDEX_WHEREEVER, item, item->getItemCount(), nullptr, FLAG_NOLIMIT);
+		auto targetPlayer = player;
+		if (item->hasOwner() && !item->isOwner(targetPlayer)) {
+			targetPlayer = g_game().getPlayerByGUID(item->getOwnerId());
+			if (!targetPlayer) {
+				g_game().internalRemoveItem(item, item->getItemCount());
+				continue;
+			}
+			playersToSave.insert(targetPlayer);
+		}
+		g_game().internalMoveItem(item->getParent(), targetPlayer->getInbox(), INDEX_WHEREEVER, item, item->getItemCount(), nullptr, FLAG_NOLIMIT);
 	}
-	g_saveManager().savePlayer(player);
+	for (auto playerToSave : playersToSave) {
+		g_saveManager().savePlayer(playerToSave);
+	}
 	return true;
 }
 
@@ -761,7 +794,7 @@ void Houses::payHouses(RentPeriod_t rentPeriod) const {
 		auto player = g_game().getPlayerByGUID(ownerId, true);
 		if (!player) {
 			// Player doesn't exist, reset house owner
-			house->setOwner(0);
+			house->tryTransferOwnership(nullptr, true);
 			continue;
 		}
 
@@ -788,6 +821,7 @@ void Houses::payHouses(RentPeriod_t rentPeriod) const {
 
 		if (player->getBankBalance() >= rent) {
 			g_game().removeMoney(player, rent, 0, true);
+			g_metrics().addCounter("balance_decrease", rent, { { "player", player->getName() }, { "context", "house_rent" } });
 
 			time_t paidUntil = currentTime;
 			switch (rentPeriod) {

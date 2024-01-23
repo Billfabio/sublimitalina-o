@@ -61,9 +61,10 @@ public:
 	void close(bool force = false);
 	// Used by protocols that require server to send first
 	void accept(Protocol_ptr protocolPtr);
-	void accept(bool toggleParseHeader = true);
+	void acceptInternal(bool toggleParseHeader = true);
 
 	void resumeWork();
+
 	void send(const OutputMessage_ptr &outputMessage);
 
 	uint32_t getIP();
@@ -99,7 +100,7 @@ private:
 
 	asio::ip::tcp::socket socket;
 
-	time_t timeConnected;
+	std::time_t timeConnected = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	uint32_t packetsSent = 0;
 	uint32_t ip = 1;
 

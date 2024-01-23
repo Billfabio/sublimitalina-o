@@ -96,9 +96,11 @@ private:
 			"Raids::checkRaids",
 			"SpawnMonster::checkSpawnMonster",
 			"SpawnMonster::scheduleSpawn",
+			"SpawnMonster::startup",
 			"SpawnNpc::checkSpawnNpc",
 			"Webhook::run",
 			"Protocol::sendRecvMessageCallback",
+			"sendRecvMessageCallback",
 		});
 
 		return tasksContext.contains(context);
@@ -111,7 +113,7 @@ private:
 	};
 
 	std::function<void(void)> func = nullptr;
-	std::string_view context;
+	std::string context;
 
 	int64_t utime = 0;
 	int64_t expiration = 0;

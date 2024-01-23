@@ -1,6 +1,6 @@
 local storeItemID = {
 	-- registered item ids here are not tradable with players
-	-- these items can be set to moveable at items.xml
+	-- these items can be set to movable at items.xml
 	-- 500 charges exercise weapons
 	28552, -- exercise sword
 	28553, -- exercise axe
@@ -206,8 +206,9 @@ function Player:onLookInBattleList(creature, distance)
 		local master = creature:getMaster()
 		local summons = { "sorcerer familiar", "knight familiar", "druid familiar", "paladin familiar" }
 		if master and table.contains(summons, creature:getName():lower()) then
+			local familiarSummonTime = master:kv():get("familiar-summon-time") or 0
 			description = description .. " (Master: " .. master:getName() .. "). \z
-				It will disappear in " .. getTimeInWords(master:getStorageValue(Global.Storage.FamiliarSummon) - os.time())
+				It will disappear in " .. getTimeInWords(familiarSummonTime - os.time())
 		end
 	end
 	if self:getGroup():getAccess() then
@@ -638,22 +639,18 @@ function Player:onChangeZone(zone)
 				if stamina < 2520 then
 					if not event then
 						local delay = configManager.getNumber(configKeys.STAMINA_ORANGE_DELAY)
-						if stamina > 2400 and stamina <= 2520 then
+						if stamina > 2340 and stamina <= 2520 then
 							delay = configManager.getNumber(configKeys.STAMINA_GREEN_DELAY)
 						end
 
-						local message = string.format("In protection zone. Every %i minutes, gain %i stamina.", delay, configManager.getNumber(configKeys.STAMINA_PZ_GAIN))
-						self:sendTextMessage(MESSAGE_STATUS, message)
+						local message = string.format("In protection zone. Recharging %i stamina every %i minutes.", configManager.getNumber(configKeys.STAMINA_PZ_GAIN), delay)
+						self:sendTextMessage(MESSAGE_FAILURE, message)
 						staminaBonus.eventsPz[self:getId()] = addEvent(addStamina, delay * 60 * 1000, nil, self:getId(), delay * 60 * 1000)
 					end
 				end
 			else
 				if event then
-					self:sendTextMessage(
-						MESSAGE_STATUS,
-						"You are no longer refilling stamina, \z
-                                         since you left a regeneration zone."
-					)
+					self:sendTextMessage(MESSAGE_FAILURE, "You are no longer refilling stamina, since you left a regeneration zone.")
 					stopEvent(event)
 					staminaBonus.eventsPz[self:getId()] = nil
 				end
@@ -665,3 +662,24 @@ function Player:onChangeZone(zone)
 end
 
 function Player:onInventoryUpdate(item, slot, equip) end
+
+function Player:getURL()
+	local playerLink = string.gsub(self:getName(), "%s+", "+")
+	local serverURL = configManager.getString(configKeys.URL)
+	return serverURL .. "/characters/" .. playerLink
+end
+
+function Player:getMarkdownLink()
+	local vocation = self:vocationAbbrev()
+	local emoji = ":school_satchel:"
+	if self:isKnight() then
+		emoji = ":crossed_swords:"
+	elseif self:isPaladin() then
+		emoji = ":bow_and_arrow:"
+	elseif self:isDruid() then
+		emoji = ":herb:"
+	elseif self:isSorcerer() then
+		emoji = ":crystal_ball:"
+	end
+	return "**[" .. self:getName() .. "](" .. self:getURL() .. ")** " .. emoji .. " [_" .. vocation .. "_]"
+end

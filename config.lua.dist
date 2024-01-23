@@ -62,12 +62,13 @@ statusProtocolPort = 7171
 maxPlayers = 0
 serverName = "OTServBR-Global"
 serverMotd = "Welcome to the OTServBR-Global!"
-onePlayerOnlinePerAccount = true
 statusTimeout = 5 * 1000
 replaceKickOnLogin = true
 maxPacketsPerSecond = 25
 maxItem = 2000
 maxContainer = 100
+maxPlayersOnlinePerAccount = 1
+maxPlayersOutsidePZPerAccount = 1
 
 -- Packet Compression
 -- Minimize network bandwith and reduce ping
@@ -117,8 +118,10 @@ forgeCostOneSliver = 20
 forgeSliverAmount = 3
 forgeCoreCost = 50
 forgeMaxDust = 225
-forgeFusionCost = 100
-forgeTransferCost = 100
+forgeFusionDustCost = 100
+forgeConvergenceFusionDustCost = 130
+forgeTransferDustCost = 100
+forgeConvergenceTransferCost = 160
 forgeBaseSuccessRate = 50
 forgeBonusSuccessRate = 15
 forgeTierLossReduction = 50
@@ -129,6 +132,24 @@ forgeInfluencedLimit = 300
 forgeFiendishLimit = 3
 forgeFiendishIntervalType = "hour"
 forgeFiendishIntervalTime = "1"
+
+ruseChanceFormulaA = 0.0307576
+ruseChanceFormulaB = 0.440697
+ruseChanceFormulaC = 0.026
+
+onslaughtChanceFormulaA = 0.05
+onslaughtChanceFormulaB = 0.4
+onslaughtChanceFormulaC = 0.05
+
+momentumChanceFormulaA = 0.05
+momentumChanceFormulaB = 1.9
+momentumChanceFormulaC = 0.05
+
+transcendanceChanceFormulaA = 0.0127
+transcendanceChanceFormulaB = 0.1070
+transcendanceChanceFormulaC = 0.0073
+
+transcendanceAvatarDuration = 7000
 
 -- Bestiary & Bosstiary system
 -- NOTE: bestiaryKillMultiplier, multiplier value of monster killed, default 1
@@ -146,6 +167,7 @@ hazardCriticalInterval = 2000
 hazardCriticalChance = 750
 hazardCriticalMultiplier = 25
 hazardDamageMultiplier = 200
+hazardDefenseMultiplier = 0
 hazardDodgeMultiplier = 85
 hazardPodsDropMultiplier = 87
 hazardPodsTimeToDamage = 2000
@@ -174,6 +196,15 @@ pvpMaxLevelDifference = 0
 -- NOTE: only the wheel points are modified, all other data is on the client executable and cannot be modified
 wheelSystemEnabled = true
 wheelPointsPerLevel = 1
+
+-- Gem Atelier
+wheelAtelierRotateLesserCost = 125000
+wheelAtelierRotateRegularCost = 250000
+wheelAtelierRotateGreaterCost = 500000
+
+wheelAtelierRevealLesserCost = 125000
+wheelAtelierRevealRegularCost = 1000000
+wheelAtelierRevealGreaterCost = 6000000
 
 -- Familiar system
 -- NOTE: the time will be divided by 2 to get half the value, the familiar lasts 15 minutes by default and the cooldown of the spell is 30 minutes
@@ -207,6 +238,7 @@ onlyPremiumAccount = false
 -- NOTE: buyBlessCommandFee will add fee when player buy bless by command (!bless), active changing value between 1 and 100 (fee percent. ex: 3 = 3%, 30 = 30%)
 -- NOTE: teleportPlayerToVocationRoom will enable oressa to teleport player to his/her room vocation
 -- NOTE: toggleReceiveReward = true, will enable players to choose one of reward exercise weapon by command !reward
+-- NOTE: randomMonsterSpawn = true, will enable monsters from the same spawn to be randomized between them, thus making a variable hunt
 weatherRain = false
 thunderEffect = false
 allConsoleLog = false
@@ -222,6 +254,7 @@ buyAolCommandFee = 0
 buyBlessCommandFee = 0
 teleportPlayerToVocationRoom = true
 toggleReceiveReward = false
+randomMonsterSpawn = false
 
 -- Teleport summon
 -- Set to true will never remove the summon
@@ -355,6 +388,8 @@ resetSessionsOnStartup = false
 
 -- Misc.
 -- NOTE: experienceDisplayRates: set to false to ignore exp rate or true to include exp rate
+-- NOTE: disableLegacyRaids: set to true to disable legacy XML raids
+-- NOTE: combatChainDelay: set to minimum 50 miliseconds
 allowChangeOutfit = true
 toggleMountInProtectionZone = false
 freePremium = false
@@ -370,6 +405,7 @@ showScriptsLogInConsole = false
 criticalChance = 10
 inventoryGlowOnFiveBless = false
 adventurersBlessingLevel = 21
+skulledDeathLoseStoreItem = false
 experienceDisplayRates = true
 -- configure attack base on Fist Fighting skill/experience
 -- multiplierSpeedOnFist * 5  (multiplies the value obtained from the player fist skill and multiplies it * 5) max 25 is recommended due minTicks limits else player stop attack
@@ -377,6 +413,12 @@ experienceDisplayRates = true
 toggleAttackSpeedOnFist = false
 multiplierSpeedOnFist = 5
 maxSpeedOnFist = 500
+disableLegacyRaids = false
+disableMonsterArmor = false
+combatChainDelay = 50
+minElementalResistance = -200
+maxElementalResistance = 200
+maxDamageReflection = 200
 
 -- Global server Save
 -- NOTE: globalServerSaveNotifyDuration in minutes
@@ -463,6 +505,7 @@ location = "South America"
 -- The URL layout is https://discord.com/api/webhooks/:id/:token
 -- Leave empty if you wish to disable.
 discordWebhookURL = ""
+discordSendFooter = true
 
 -- Vip System (Get more info in: https://github.com/opentibiabr/canary/pull/1063)
 -- NOTE: set vipSystemEnabled to true to enable the vip system functionalities (this overrides premium checks)
@@ -490,3 +533,12 @@ vipKeepHouse = false
 -- NOTE set rewardChestMaxCollectItems max items per collect action
 rewardChestCollectEnabled = true
 rewardChestMaxCollectItems = 200
+
+-- Metrics
+--- Prometheus
+metricsEnablePrometheus = false
+metricsPrometheusAddress = "0.0.0.0:9464"
+
+--- OStream
+metricsEnableOstream = false
+metricsOstreamInterval = 1000

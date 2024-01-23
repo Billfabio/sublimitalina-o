@@ -73,9 +73,7 @@ public:
 	RaceType_t getRace() const override {
 		return mType->info.race;
 	}
-	float getMitigation() const override {
-		return mType->info.mitigation * getDefenseMultiplier();
-	}
+	float getMitigation() const override;
 	int32_t getArmor() const override {
 		return mType->info.armor * getDefenseMultiplier();
 	}
@@ -272,6 +270,12 @@ public:
 	void setHazardSystemDamageBoost(bool value) {
 		hazardDamageBoost = value;
 	}
+	bool getHazardSystemDefenseBoost() const {
+		return hazardDefenseBoost;
+	}
+	void setHazardSystemDefenseBoost(bool value) {
+		hazardDefenseBoost = value;
+	}
 	// Hazard end
 
 	void updateTargetList();
@@ -332,12 +336,15 @@ public:
 
 	float getAttackMultiplier() const {
 		float multiplier = mType->getAttackMultiplier();
-		return multiplier * std::pow(1.03f, getForgeStack());
+		if (auto stacks = getForgeStack(); stacks > 0) {
+			multiplier *= (1.35 + (stacks - 1) * 0.1);
+		}
+		return multiplier;
 	}
 
 	float getDefenseMultiplier() const {
 		float multiplier = mType->getDefenseMultiplier();
-		return multiplier * std::pow(1.01f, getForgeStack());
+		return multiplier * std::pow(1.02f, getForgeStack());
 	}
 
 private:
@@ -391,6 +398,7 @@ private:
 	bool hazardCrit = false;
 	bool hazardDodge = false;
 	bool hazardDamageBoost = false;
+	bool hazardDefenseBoost = false;
 
 	void onCreatureEnter(std::shared_ptr<Creature> creature);
 	void onCreatureLeave(std::shared_ptr<Creature> creature);
