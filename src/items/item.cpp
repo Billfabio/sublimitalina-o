@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -28,6 +28,20 @@
 Items Item::items;
 
 std::shared_ptr<Item> Item::CreateItem(const uint16_t type, uint16_t count /*= 0*/, Position* itemPosition /*= nullptr*/) {
+	// A map which contains items that, when on creating, should be transformed to the default type.
+	static const phmap::flat_hash_map<ItemID_t, ItemID_t> ItemTransformationMap = {
+		{ ITEM_SWORD_RING_ACTIVATED, ITEM_SWORD_RING },
+		{ ITEM_CLUB_RING_ACTIVATED, ITEM_CLUB_RING },
+		{ ITEM_DWARVEN_RING_ACTIVATED, ITEM_DWARVEN_RING },
+		{ ITEM_RING_HEALING_ACTIVATED, ITEM_RING_HEALING },
+		{ ITEM_STEALTH_RING_ACTIVATED, ITEM_STEALTH_RING },
+		{ ITEM_TIME_RING_ACTIVATED, ITEM_TIME_RING },
+		{ ITEM_PAIR_SOFT_BOOTS_ACTIVATED, ITEM_PAIR_SOFT_BOOTS },
+		{ ITEM_DEATH_RING_ACTIVATED, ITEM_DEATH_RING },
+		{ ITEM_PRISMATIC_RING_ACTIVATED, ITEM_PRISMATIC_RING },
+		{ ITEM_OLD_DIAMOND_ARROW, ITEM_DIAMOND_ARROW },
+	};
+
 	std::shared_ptr<Item> newItem = nullptr;
 
 	const ItemType &it = Item::items[type];
@@ -817,7 +831,7 @@ Attr_ReadValue Item::readAttr(AttrTypes_t attr, PropStream &propStream) {
 				return ATTR_READ_ERROR;
 			}
 
-			g_logger().debug("Setting flag {} flags, to item id {}", flags, getID());
+			g_logger().trace("Setting obtain flag {} flags, to item id {}", flags, getID());
 			setAttribute(ItemAttribute_t::OBTAINCONTAINER, flags);
 			break;
 		}
@@ -1245,7 +1259,7 @@ Item::getDescriptions(const ItemType &it, std::shared_ptr<Item> item /*= nullptr
 			}
 
 			for (uint8_t i = SKILL_CRITICAL_HIT_CHANCE; i <= SKILL_LAST; i++) {
-				auto skill = item->getSkill(static_cast<skills_t>(i));
+				auto skill = item ? item->getSkill(static_cast<skills_t>(i)) : it.getSkill(static_cast<skills_t>(i));
 				if (!skill) {
 					continue;
 				}
@@ -1648,7 +1662,7 @@ Item::getDescriptions(const ItemType &it, std::shared_ptr<Item> item /*= nullptr
 			}
 
 			for (uint8_t i = SKILL_CRITICAL_HIT_CHANCE; i <= SKILL_LAST; i++) {
-				auto skill = item->getSkill(static_cast<skills_t>(i));
+				auto skill = item ? item->getSkill(static_cast<skills_t>(i)) : it.getSkill(static_cast<skills_t>(i));
 				if (!skill) {
 					continue;
 				}
@@ -2087,7 +2101,7 @@ std::string Item::parseShowAttributesDescription(std::shared_ptr<Item> item, con
 			}
 
 			for (uint8_t i = SKILL_CRITICAL_HIT_CHANCE; i <= SKILL_LAST; i++) {
-				auto skill = item->getSkill(static_cast<skills_t>(i));
+				auto skill = item ? item->getSkill(static_cast<skills_t>(i)) : itemType.getSkill(static_cast<skills_t>(i));
 				if (!skill) {
 					continue;
 				}
@@ -2385,7 +2399,7 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, std::
 				}
 
 				for (uint8_t i = SKILL_CRITICAL_HIT_CHANCE; i <= SKILL_LAST; i++) {
-					auto skill = item->getSkill(static_cast<skills_t>(i));
+					auto skill = item ? item->getSkill(static_cast<skills_t>(i)) : it.getSkill(static_cast<skills_t>(i));
 					if (!skill) {
 						continue;
 					}
@@ -2653,7 +2667,7 @@ std::string Item::getDescription(const ItemType &it, int32_t lookDistance, std::
 				}
 
 				for (uint8_t i = SKILL_CRITICAL_HIT_CHANCE; i <= SKILL_LAST; i++) {
-					auto skill = item->getSkill(static_cast<skills_t>(i));
+					auto skill = item ? item->getSkill(static_cast<skills_t>(i)) : it.getSkill(static_cast<skills_t>(i));
 					if (!skill) {
 						continue;
 					}

@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -340,7 +340,7 @@ enum MessageClasses : uint8_t {
 	/* Red message in the console*/ /* TALKTYPE_BROADCAST */
 
 	MESSAGE_LOGIN = 17, /* White message at the bottom of the game window and in the console*/
-	MESSAGE_ADMINISTRADOR = 18, /* Red message in game window and in the console*/
+	MESSAGE_ADMINISTRATOR = 18, /* Red message in game window and in the console*/
 	MESSAGE_EVENT_ADVANCE = 19, /* White message in game window and in the console*/
 	MESSAGE_GAME_HIGHLIGHT = 20, /* Red message in game window and in the console*/
 	MESSAGE_FAILURE = 21, /* White message at the bottom of the game window"*/
@@ -663,20 +663,6 @@ enum ItemID_t : uint16_t {
 	ITEM_NONE = 0
 };
 
-// A map which contains items that, when on creating, should be transformed to the default type.
-const phmap::flat_hash_map<ItemID_t, ItemID_t> ItemTransformationMap = {
-	{ ITEM_SWORD_RING_ACTIVATED, ITEM_SWORD_RING },
-	{ ITEM_CLUB_RING_ACTIVATED, ITEM_CLUB_RING },
-	{ ITEM_DWARVEN_RING_ACTIVATED, ITEM_DWARVEN_RING },
-	{ ITEM_RING_HEALING_ACTIVATED, ITEM_RING_HEALING },
-	{ ITEM_STEALTH_RING_ACTIVATED, ITEM_STEALTH_RING },
-	{ ITEM_TIME_RING_ACTIVATED, ITEM_TIME_RING },
-	{ ITEM_PAIR_SOFT_BOOTS_ACTIVATED, ITEM_PAIR_SOFT_BOOTS },
-	{ ITEM_DEATH_RING_ACTIVATED, ITEM_DEATH_RING },
-	{ ITEM_PRISMATIC_RING_ACTIVATED, ITEM_PRISMATIC_RING },
-	{ ITEM_OLD_DIAMOND_ARROW, ITEM_DIAMOND_ARROW },
-};
-
 enum class PlayerFlags_t : uint8_t {
 	CannotUseCombat,
 	CannotAttackPlayer,
@@ -732,17 +718,6 @@ enum Blessings_t : uint8_t {
 	EMBRACE_OF_TIBIA = 6,
 	BLOOD_OF_THE_MOUNTAIN = 7,
 	HEARTH_OF_THE_MOUNTAIN = 8,
-};
-
-const phmap::flat_hash_map<Blessings_t, std::string> BlessingNames = {
-	{ TWIST_OF_FATE, "Twist of Fate" },
-	{ WISDOM_OF_SOLITUDE, "The Wisdom of Solitude" },
-	{ SPARK_OF_THE_PHOENIX, "The Spark of the Phoenix" },
-	{ FIRE_OF_THE_SUNS, "The Fire of the Suns" },
-	{ SPIRITUAL_SHIELDING, "The Spiritual Shielding" },
-	{ EMBRACE_OF_TIBIA, "The Embrace of Tibia" },
-	{ BLOOD_OF_THE_MOUNTAIN, "Blood of the Mountain" },
-	{ HEARTH_OF_THE_MOUNTAIN, "Heart of the Mountain" },
 };
 
 enum BedItemPart_t : uint8_t {

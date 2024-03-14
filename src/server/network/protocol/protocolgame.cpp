@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -22,15 +22,24 @@
 #include "lua/modules/modules.hpp"
 #include "creatures/monsters/monster.hpp"
 #include "creatures/monsters/monsters.hpp"
+#include "game/modal_window/modal_window.hpp"
 #include "server/network/message/outputmessage.hpp"
 #include "creatures/players/player.hpp"
 #include "creatures/players/wheel/player_wheel.hpp"
+#include "creatures/players/achievement/player_achievement.hpp"
 #include "creatures/players/grouping/familiars.hpp"
 #include "server/network/protocol/protocolgame.hpp"
 #include "game/scheduling/dispatcher.hpp"
 #include "creatures/combat/spells.hpp"
+#include "utils/tools.hpp"
 #include "creatures/players/management/waitlist.hpp"
 #include "items/weapons/weapons.hpp"
+#include "enums/object_category.hpp"
+#include "enums/account_type.hpp"
+#include "enums/account_group_type.hpp"
+#include "enums/account_coins.hpp"
+
+#include "creatures/players/highscore_category.hpp"
 
 /*
  * NOTE: This namespace is used so that we can add functions without having to declare them in the ".hpp/.hpp" file
@@ -518,7 +527,7 @@ void ProtocolGame::login(const std::string &name, uint32_t accountId, OperatingS
 			return;
 		}
 
-		if (g_configManager().getBoolean(ONLY_PREMIUM_ACCOUNT, __FUNCTION__) && !player->isPremium() && (player->getGroup()->id < account::GROUP_TYPE_GAMEMASTER || player->getAccountType() < account::ACCOUNT_TYPE_GAMEMASTER)) {
+		if (g_configManager().getBoolean(ONLY_PREMIUM_ACCOUNT, __FUNCTION__) && !player->isPremium() && (player->getGroup()->id < GROUP_TYPE_GAMEMASTER || player->getAccountType() < ACCOUNT_TYPE_GAMEMASTER)) {
 			g_game().removePlayerUniqueLogin(player);
 			disconnectClient("Your premium time for this account is out.\n\nTo play please buy additional premium time from our website");
 			return;
@@ -526,7 +535,7 @@ void ProtocolGame::login(const std::string &name, uint32_t accountId, OperatingS
 
 		auto onlineCount = g_game().getPlayersByAccount(player->getAccount()).size();
 		auto maxOnline = g_configManager().getNumber(MAX_PLAYERS_PER_ACCOUNT, __FUNCTION__);
-		if (player->getAccountType() < account::ACCOUNT_TYPE_GAMEMASTER && onlineCount >= maxOnline) {
+		if (player->getAccountType() < ACCOUNT_TYPE_GAMEMASTER && onlineCount >= maxOnline) {
 			g_game().removePlayerUniqueLogin(player);
 			disconnectClient(fmt::format("You may only login with {} character{}\nof your account at the same time.", maxOnline, maxOnline > 1 ? "s" : ""));
 			return;
@@ -583,7 +592,7 @@ void ProtocolGame::login(const std::string &name, uint32_t accountId, OperatingS
 
 		const auto tile = g_game().map.getOrCreateTile(player->getLoginPosition());
 		// moving from a pz tile to a non-pz tile
-		if (maxOnline > 1 && player->getAccountType() < account::ACCOUNT_TYPE_GAMEMASTER && !tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
+		if (maxOnline > 1 && player->getAccountType() < ACCOUNT_TYPE_GAMEMASTER && !tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
 			auto maxOutsizePZ = g_configManager().getNumber(MAX_PLAYERS_OUTSIDE_PZ_PER_ACCOUNT, __FUNCTION__);
 			auto accountPlayers = g_game().getPlayersByAccount(player->getAccount());
 			int countOutsizePZ = 0;
@@ -2149,24 +2158,15 @@ void ProtocolGame::sendHighscores(const std::vector<HighscoreCharacter> &charact
 	}
 	msg.add<uint32_t>(selectedVocation); // Selected Vocation
 
-	HighscoreCategory highscoreCategories[] = {
-		{ "Experience Points", HIGHSCORE_CATEGORY_EXPERIENCE },
-		{ "Fist Fighting", HIGHSCORE_CATEGORY_FIST_FIGHTING },
-		{ "Club Fighting", HIGHSCORE_CATEGORY_CLUB_FIGHTING },
-		{ "Sword Fighting", HIGHSCORE_CATEGORY_SWORD_FIGHTING },
-		{ "Axe Fighting", HIGHSCORE_CATEGORY_AXE_FIGHTING },
-		{ "Distance Fighting", HIGHSCORE_CATEGORY_DISTANCE_FIGHTING },
-		{ "Shielding", HIGHSCORE_CATEGORY_SHIELDING },
-		{ "Fishing", HIGHSCORE_CATEGORY_FISHING },
-		{ "Magic Level", HIGHSCORE_CATEGORY_MAGIC_LEVEL }
-	};
-
 	uint8_t selectedCategory = 0;
-	msg.addByte(sizeof(highscoreCategories) / sizeof(HighscoreCategory)); // Category Count
-	for (HighscoreCategory &category : highscoreCategories) {
-		msg.addByte(category.id); // Category Id
-		msg.addString(category.name, "ProtocolGame::sendHighscores - category.name"); // Category Name
-		if (category.id == categoryId) {
+	const auto &highscoreCategories = g_game().getHighscoreCategories();
+	msg.addByte(highscoreCategories.size()); // Category Count
+	g_logger().debug("[ProtocolGame::sendHighscores] - Category Count: {}", highscoreCategories.size());
+	for (const HighscoreCategory &category : highscoreCategories) {
+		g_logger().debug("[ProtocolGame::sendHighscores] - Category: {} - Name: {}", category.m_id, category.m_name);
+		msg.addByte(category.m_id); // Category Id
+		msg.addString(category.m_name, "ProtocolGame::sendHighscores - category.name"); // Category Name
+		if (category.m_id == categoryId) {
 			selectedCategory = categoryId;
 		}
 	}
@@ -2334,10 +2334,10 @@ void ProtocolGame::parseBestiarysendMonsterData(NetworkMessage &msg) {
 				break;
 		}
 
-		newmsg.add<uint16_t>(shouldAddItem == true ? loot.id : 0);
+		newmsg.add<uint16_t>(g_configManager().getBoolean(SHOW_LOOTS_IN_BESTIARY, __FUNCTION__) || shouldAddItem == true ? loot.id : 0);
 		newmsg.addByte(difficult);
 		newmsg.addByte(0); // 1 if special event - 0 if regular loot (?)
-		if (shouldAddItem == true) {
+		if (g_configManager().getBoolean(SHOW_LOOTS_IN_BESTIARY, __FUNCTION__) || shouldAddItem == true) {
 			newmsg.addString(loot.name, "ProtocolGame::parseBestiarysendMonsterData - loot.name");
 			newmsg.addByte(loot.countmax > 0 ? 0x1 : 0x0);
 		}
@@ -2782,7 +2782,7 @@ void ProtocolGame::refreshCyclopediaMonsterTracker(const std::unordered_set<std:
 	msg.addByte(0xB9);
 	msg.addByte(isBoss ? 0x01 : 0x00);
 	msg.addByte(trackerSet.size());
-	for (const auto mtype : trackerSet) {
+	for (const auto &mtype : trackerSet) {
 		auto raceId = mtype->info.raceid;
 		const auto stages = g_ioBosstiary().getBossRaceKillStages(mtype->info.bosstiaryRace);
 		if (isBoss && (stages.empty() || stages.size() != 3)) {
@@ -3643,7 +3643,7 @@ void ProtocolGame::sendCyclopediaCharacterRecentPvPKills(uint16_t page, uint16_t
 	writeToOutputBuffer(msg);
 }
 
-void ProtocolGame::sendCyclopediaCharacterAchievements() {
+void ProtocolGame::sendCyclopediaCharacterAchievements(uint16_t secretsUnlocked, std::vector<std::pair<Achievement, uint32_t>> achievementsUnlocked) {
 	if (!player || oldProtocol) {
 		return;
 	}
@@ -3651,10 +3651,24 @@ void ProtocolGame::sendCyclopediaCharacterAchievements() {
 	NetworkMessage msg;
 	msg.addByte(0xDA);
 	msg.addByte(CYCLOPEDIA_CHARACTERINFO_ACHIEVEMENTS);
-	msg.addByte(0x00);
-	msg.add<uint16_t>(0);
-	msg.add<uint16_t>(0);
-	msg.add<uint16_t>(0);
+	msg.addByte(0x00); // 0x00 Here means 'no error'
+	msg.add<uint16_t>(player->achiev()->getPoints());
+	msg.add<uint16_t>(secretsUnlocked);
+	msg.add<uint16_t>(static_cast<uint16_t>(achievementsUnlocked.size()));
+	std::string messageAchievName = "ProtocolGame::sendCyclopediaCharacterAchievements - achievement.name";
+	std::string messageAchievDesc = "ProtocolGame::sendCyclopediaCharacterAchievements - achievement.description";
+	for (const auto &[achievement, addedTimestamp] : achievementsUnlocked) {
+		msg.add<uint16_t>(achievement.id);
+		msg.add<uint32_t>(addedTimestamp);
+		if (achievement.secret) {
+			msg.addByte(0x01);
+			msg.addString(achievement.name, messageAchievName);
+			msg.addString(achievement.description, messageAchievDesc);
+			msg.addByte(achievement.grade);
+		} else {
+			msg.addByte(0x00);
+		}
+	}
 	writeToOutputBuffer(msg);
 }
 
@@ -3727,7 +3741,7 @@ void ProtocolGame::sendCyclopediaCharacterOutfitsMounts() {
 	uint16_t mountSize = 0;
 	auto startMounts = msg.getBufferPosition();
 	msg.skipBytes(2);
-	for (const auto mount : g_game().mounts.getMounts()) {
+	for (const auto &mount : g_game().mounts.getMounts()) {
 		const std::string type = mount->type;
 		if (player->hasMount(mount)) {
 			++mountSize;
@@ -3935,6 +3949,10 @@ void ProtocolGame::sendStats() {
 }
 
 void ProtocolGame::sendBasicData() {
+	if (!player) {
+		return;
+	}
+
 	NetworkMessage msg;
 	msg.addByte(0x9F);
 	if (player->isPremium() || player->isVip()) {
@@ -3947,7 +3965,7 @@ void ProtocolGame::sendBasicData() {
 	msg.addByte(player->getVocation()->getClientId());
 
 	// Prey window
-	if (player->getVocation()->getId() == 0 && player->getGroup()->id < account::GROUP_TYPE_GAMEMASTER) {
+	if (player->getVocation()->getId() == 0 && player->getGroup()->id < GROUP_TYPE_GAMEMASTER) {
 		msg.addByte(0);
 	} else {
 		msg.addByte(1); // has reached Main (allow player to open Prey window)
@@ -4048,7 +4066,7 @@ void ProtocolGame::sendPremiumTrigger() {
 void ProtocolGame::sendTextMessage(const TextMessage &message) {
 	if (message.type == MESSAGE_NONE) {
 		g_logger().error("[ProtocolGame::sendTextMessage] - Message type is wrong, missing or invalid for player with name {}, on position {}", player->getName(), player->getPosition().toString());
-		player->sendTextMessage(MESSAGE_ADMINISTRADOR, "There was a problem requesting your message, please contact the administrator");
+		player->sendTextMessage(MESSAGE_ADMINISTRATOR, "There was a problem requesting your message, please contact the administrator");
 		return;
 	}
 
@@ -4127,15 +4145,21 @@ void ProtocolGame::sendTextMessage(const TextMessage &message) {
 		}
 		case MESSAGE_HEALED:
 		case MESSAGE_HEALED_OTHERS: {
-			msg.addPosition(message.position);
-			msg.add<uint32_t>(message.primary.value);
-			msg.addByte(message.primary.color);
+			if (!oldProtocol) {
+				msg.addPosition(message.position);
+				msg.add<uint32_t>(message.primary.value);
+				msg.addByte(message.primary.color);
+			}
 			break;
 		}
 		case MESSAGE_EXPERIENCE:
 		case MESSAGE_EXPERIENCE_OTHERS: {
 			msg.addPosition(message.position);
-			msg.add<uint64_t>(message.primary.value);
+			if (!oldProtocol) {
+				msg.add<uint64_t>(message.primary.value);
+			} else {
+				msg.add<uint32_t>(message.primary.value);
+			}
 			msg.addByte(message.primary.color);
 			break;
 		}
@@ -4641,8 +4665,8 @@ void ProtocolGame::updateCoinBalance() {
 			[](uint32_t playerId) {
 				auto threadPlayer = g_game().getPlayerByID(playerId);
 				if (threadPlayer && threadPlayer->getAccount()) {
-					auto [coins, errCoin] = threadPlayer->getAccount()->getCoins(account::CoinType::COIN);
-					auto [transferCoins, errTCoin] = threadPlayer->getAccount()->getCoins(account::CoinType::TRANSFERABLE);
+					auto [coins, errCoin] = threadPlayer->getAccount()->getCoins(enumToValue(CoinType::Normal));
+					auto [transferCoins, errTCoin] = threadPlayer->getAccount()->getCoins(enumToValue(CoinType::Transferable));
 
 					threadPlayer->coinBalance = coins;
 					threadPlayer->coinTransferableBalance = transferCoins;
@@ -5012,7 +5036,6 @@ void ProtocolGame::sendOpenForge() {
 	// Checking size of map to send in the addByte (total fusion items count)
 	uint8_t fusionTotalItemsCount = 0;
 	for (const auto &[itemId, tierAndCountMap] : fusionItemsMap) {
-		auto classification = Item::items[itemId].upgradeClassification;
 		for (const auto [itemTier, itemCount] : tierAndCountMap) {
 			if (itemCount >= 2) {
 				fusionTotalItemsCount++;
@@ -5902,7 +5925,12 @@ void ProtocolGame::sendRestingStatus(uint8_t protection) {
 	msg.addByte(0xA9);
 	msg.addByte(protection); // 1 / 0
 
-	int32_t dailyStreak = static_cast<int32_t>(player->kv()->scoped("daily-reward")->get("streak")->getNumber());
+	uint8_t dailyStreak = 0;
+	auto dailyRewardKV = player->kv()->scoped("daily-reward")->get("streak");
+	if (dailyRewardKV && dailyRewardKV.has_value()) {
+		dailyStreak = static_cast<uint8_t>(dailyRewardKV->getNumber());
+	}
+
 	msg.addByte(dailyStreak < 2 ? 0 : 1);
 	if (dailyStreak < 2) {
 		msg.addString("Resting Area (no active bonus)", "ProtocolGame::sendRestingStatus - Resting Area (no active bonus)");
@@ -6086,6 +6114,10 @@ void ProtocolGame::sendPartyCreatureShowStatus(std::shared_ptr<Creature> target,
 }
 
 void ProtocolGame::sendPartyPlayerVocation(std::shared_ptr<Player> target) {
+	if (!target) {
+		return;
+	}
+
 	uint32_t cid = target->getID();
 	if (!knownCreatureSet.contains(cid)) {
 		sendPartyCreatureUpdate(target);
@@ -6105,7 +6137,7 @@ void ProtocolGame::sendPartyPlayerVocation(std::shared_ptr<Player> target) {
 }
 
 void ProtocolGame::sendPlayerVocation(std::shared_ptr<Player> target) {
-	if (!player || oldProtocol) {
+	if (!player || !target || oldProtocol) {
 		return;
 	}
 
@@ -6250,7 +6282,7 @@ void ProtocolGame::sendAddCreature(std::shared_ptr<Creature> creature, const Pos
 
 		if (isLogin) {
 			if (std::shared_ptr<Player> creaturePlayer = creature->getPlayer()) {
-				if (!creaturePlayer->isAccessPlayer() || creaturePlayer->getAccountType() == account::ACCOUNT_TYPE_NORMAL) {
+				if (!creaturePlayer->isAccessPlayer() || creaturePlayer->getAccountType() == ACCOUNT_TYPE_NORMAL) {
 					sendMagicEffect(pos, CONST_ME_TELEPORT);
 				}
 			} else {
@@ -6273,7 +6305,7 @@ void ProtocolGame::sendAddCreature(std::shared_ptr<Creature> creature, const Pos
 
 	// Allow bug report (Ctrl + Z)
 	if (oldProtocol) {
-		if (player->getAccountType() >= account::ACCOUNT_TYPE_NORMAL) {
+		if (player->getAccountType() >= ACCOUNT_TYPE_NORMAL) {
 			msg.addByte(0x01);
 		} else {
 			msg.addByte(0x00);
@@ -6590,17 +6622,6 @@ void ProtocolGame::sendOutfitWindow() {
 		AddOutfit(msg, currentOutfit);
 
 		std::vector<ProtocolOutfit> protocolOutfits;
-		if (player->isAccessPlayer()) {
-			static const std::string gamemasterOutfitName = "Game Master";
-			protocolOutfits.emplace_back(gamemasterOutfitName, 75, 0);
-
-			static const std::string gmCustomerSupport = "Customer Support";
-			protocolOutfits.emplace_back(gmCustomerSupport, 266, 0);
-
-			static const std::string communityManager = "Community Manager";
-			protocolOutfits.emplace_back(communityManager, 302, 0);
-		}
-
 		const auto outfits = Outfits::getInstance().getOutfits(player->getSex());
 		protocolOutfits.reserve(outfits.size());
 		for (const auto &outfit : outfits) {
@@ -8610,7 +8631,7 @@ void ProtocolGame::sendMonsterPodiumWindow(std::shared_ptr<Item> podium, const P
 }
 
 void ProtocolGame::parseSetMonsterPodium(NetworkMessage &msg) const {
-	if (oldProtocol) {
+	if (!player || oldProtocol) {
 		return;
 	}
 
