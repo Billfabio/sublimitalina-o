@@ -6,26 +6,21 @@
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
  * Website: https://docs.opentibiabr.com/
  */
+
 #pragma once
 
-#include "lib/logging/logger.hpp"
+#include "BS_thread_pool.hpp"
 
-class ThreadPool {
+class ThreadPool : public BS::thread_pool {
 public:
 	explicit ThreadPool(Logger &logger);
 
 	// Ensures that we don't accidentally copy it
 	ThreadPool(const ThreadPool &) = delete;
-	ThreadPool operator=(const ThreadPool &) = delete;
+	ThreadPool &operator=(const ThreadPool &) = delete;
 
-	void start();
+	void start() const;
 	void shutdown();
-	asio::io_context &getIoContext();
-	void addLoad(const std::function<void(void)> &load);
-
-	uint16_t getNumberOfThreads() const {
-		return nThreads;
-	}
 
 	static int16_t getThreadId() {
 		static std::atomic_int16_t lastId = -1;
@@ -37,13 +32,16 @@ public:
 		}
 
 		return id;
-	};
+	}
+
+	bool isStopped() const {
+		return stopped;
+	}
 
 private:
-	Logger &logger;
-	asio::io_context ioService;
-	std::vector<std::jthread> threads;
-	asio::io_context::work work { ioService };
+	std::mutex mutex;
+	std::condition_variable condition;
 
-	uint16_t nThreads = 0;
+	Logger &logger;
+	bool stopped = false;
 };
